@@ -2,10 +2,30 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"math/rand"
 	"runtime"
+	"time"
+
+	"github.com/go-resty/resty/v2"
 )
 
 type RuntimeMetrics map[string]float64
+type CustomMetrics map[string]int
+
+type MetricsClient struct {
+	baseURL string
+	client  *resty.Client
+}
+
+func NewMetricsClient(baseURL string) *MetricsClient {
+	client := resty.New().
+		SetHeader("Content-Type", "text/plain")
+	return &MetricsClient{
+		baseURL: baseURL,
+		client:  client,
+	}
+}
 
 func CollectRuntimeMetrics() RuntimeMetrics {
 	var ms runtime.MemStats
@@ -59,20 +79,72 @@ func CollectRuntimeMetrics() RuntimeMetrics {
 
 		"BuckHashSys": float64(ms.BuckHashSys), // байты под hash buckets
 		"OtherSys":    float64(ms.OtherSys),    // прочие аллокации рантайма
+
+		// ===== Random Value =====
+
 	}
 }
 
-func sendGauge(name string, value float64) {
-	fmt.Printf("%v: %v \n", name, value)
+func CollectCustomMetrics() CustomMetrics {
 
+	// Заполняем map метрик
+	return CustomMetrics{
+		"RandomValue": rand.Int(),
+		"PollCount":   1,
+	}
+}
+
+type Number interface {
+	~int64 | ~float64
+}
+
+func (mc *MetricsClient) SendGauge(name string, value float64) {
+	send(mc, "gauge", name, value)
+}
+
+func (mc *MetricsClient) SendCounter(name string, value int64) {
+	send(mc, "counter", name, value)
+}
+
+func send[T Number](mc *MetricsClient, t, name string, value T) {
+	uri := fmt.Sprintf("%s/update/%s/%s/%v", mc.baseURL, t, name, value)
+
+	resp, err := mc.client.R().Post(uri)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(resp.Status())
+}
+
+func NewPollCounter() func() int {
+	var count int
+	return func() int {
+		count++
+		return count
+	}
 }
 
 func main() {
+	client := NewMetricsClient("http://localhost:8080")
+	poll := NewPollCounter()
+	var pollInterval int = 2
+	var reportInterval int = 10
 
-	metrics := CollectRuntimeMetrics()
+	time.Sleep(time.Duration(pollInterval))
 
-	for name, value := range metrics {
+	// metrics := CollectRuntimeMetrics()
+
+	time.Sleep(time.Duration(reportInterval - pollInterval))
+
+	for name, value := range CollectRuntimeMetrics() {
 		// Отправить в /update/gauge/{name}/{value}
-		sendGauge(name, value)
+		client.SendGauge(name, value)
 	}
+	for name, value := range CollectCustomMetrics() {
+		// Отправить в /update/counter/{name}/{value}
+		client.SendCounter(name, int64(value))
+	}
+	poll()
+
 }
