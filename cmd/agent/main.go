@@ -5,10 +5,13 @@ import (
 	"log"
 	"math/rand"
 	"runtime"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-resty/resty/v2"
 )
+
+var pollCount int64
 
 type RuntimeMetrics map[string]float64
 type CustomMetrics map[string]int
@@ -82,15 +85,16 @@ func CollectRuntimeMetrics() RuntimeMetrics {
 
 		// ===== Random Value =====
 
+		"RandomValue": rand.Float64(),
 	}
 }
 
 func CollectCustomMetrics() CustomMetrics {
+	counter := atomic.AddInt64(&pollCount, 1)
 
 	// Заполняем map метрик
 	return CustomMetrics{
-		"RandomValue": rand.Int(),
-		"PollCount":   1,
+		"PollCount": int(counter),
 	}
 }
 
@@ -117,34 +121,27 @@ func send[T Number](mc *MetricsClient, t, name string, value T) {
 	fmt.Println(resp.Status())
 }
 
-func NewPollCounter() func() int {
-	var count int
-	return func() int {
-		count++
-		return count
-	}
-}
-
 func main() {
 	client := NewMetricsClient("http://localhost:8080")
-	poll := NewPollCounter()
+
 	var pollInterval int = 2
 	var reportInterval int = 10
 
-	time.Sleep(time.Duration(pollInterval))
+	for {
+		time.Sleep(time.Duration(pollInterval) * time.Second)
 
-	// metrics := CollectRuntimeMetrics()
+		// metrics := CollectRuntimeMetrics()
 
-	time.Sleep(time.Duration(reportInterval - pollInterval))
+		time.Sleep(time.Duration(reportInterval-pollInterval) * time.Second)
 
-	for name, value := range CollectRuntimeMetrics() {
-		// Отправить в /update/gauge/{name}/{value}
-		client.SendGauge(name, value)
+		for name, value := range CollectRuntimeMetrics() {
+			// Отправить в /update/gauge/{name}/{value}
+			client.SendGauge(name, value)
+		}
+		for name, value := range CollectCustomMetrics() {
+			// Отправить в /update/counter/{name}/{value}
+			client.SendCounter(name, int64(value))
+		}
 	}
-	for name, value := range CollectCustomMetrics() {
-		// Отправить в /update/counter/{name}/{value}
-		client.SendCounter(name, int64(value))
-	}
-	poll()
 
 }
