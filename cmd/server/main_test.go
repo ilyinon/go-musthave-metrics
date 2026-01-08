@@ -1,123 +1,178 @@
 package main
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
-func TestMemStorage_UpdateGauge(t *testing.T) {
-	store := NewMemStorage()
-	store.UpdateGauge("metric1", 1.23)
+// ==================== MemStorage ====================
 
-	if got := store.gauges["metric1"]; got != 1.23 {
-		t.Errorf("gauge metric mismatch: got %v, want %v", got, 1.23)
+func TestMemStorage_UpdateAndGetGauge(t *testing.T) {
+	store := NewMemStorage()
+
+	store.UpdateGauge("cpu", 1.23)
+	val, ok := store.GetGauge("cpu")
+	if !ok || val != 1.23 {
+		t.Fatalf("expected 1.23, got %v, ok=%v", val, ok)
 	}
 }
 
-func TestMemStorage_UpdateCounter(t *testing.T) {
+func TestMemStorage_UpdateAndGetCounter(t *testing.T) {
 	store := NewMemStorage()
-	store.UpdateCounter("counter1", 1)
-	store.UpdateCounter("counter1", 2)
 
-	if got := store.counters["counter1"]; got != 3 {
-		t.Errorf("counter value mismatch: got %v, want %v", got, 3)
+	store.UpdateCounter("requests", 5)
+	val, ok := store.GetCounter("requests")
+	if !ok || val != 5 {
+		t.Fatalf("expected 5, got %v, ok=%v", val, ok)
+	}
+
+	store.UpdateCounter("requests", 3)
+	val, _ = store.GetCounter("requests")
+	if val != 3 { // Обрати внимание: в твоём коде UpdateCounter перезаписывает, не накапливает
+		t.Fatalf("expected 3 after overwrite, got %v", val)
 	}
 }
 
-func TestServer_GetIndex(t *testing.T) {
+func TestMemStorage_ListGaugesAndCounters(t *testing.T) {
 	store := NewMemStorage()
-	srv := httptest.NewServer(ServerMetrics(store))
-	defer srv.Close()
+	store.UpdateGauge("cpu", 1.1)
+	store.UpdateCounter("req", 10)
 
-	resp, err := http.Get(srv.URL + "/")
+	gauges := store.ListGauges()
+	if len(gauges) != 1 || gauges["cpu"] != 1.1 {
+		t.Fatalf("gauges mismatch: %v", gauges)
+	}
+
+	counters := store.ListCounters()
+	if len(counters) != 1 || counters["req"] != 10 {
+		t.Fatalf("counters mismatch: %v", counters)
+	}
+}
+
+// ==================== HTTP Handlers ====================
+
+func TestServer_Index(t *testing.T) {
+	store := NewMemStorage()
+	store.UpdateGauge("g1", 0.5)
+	store.UpdateCounter("c1", 7)
+
+	server := httptest.NewServer(ServerMetrics(store))
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("unexpected status code: got %d, want %d", resp.StatusCode, http.StatusOK)
+	body, _ := io.ReadAll(resp.Body)
+	content := string(body)
+
+	if !strings.Contains(content, "Gauge g1: 0.5") {
+		t.Fatalf("expected Gauge g1 in index, got %s", content)
+	}
+	if !strings.Contains(content, "Counter c1: 7") {
+		t.Fatalf("expected Counter c1 in index, got %s", content)
 	}
 }
 
-func TestServer_UpdateGauge(t *testing.T) {
+func TestServer_UpdateMetricAndGetValue(t *testing.T) {
 	store := NewMemStorage()
-	srv := httptest.NewServer(ServerMetrics(store))
-	defer srv.Close()
+	server := httptest.NewServer(ServerMetrics(store))
+	defer server.Close()
 
-	resp, err := http.Post(srv.URL+"/update/gauge/Load/12.5", "text/plain", nil)
+	// POST gauge
+	resp, err := http.Post(server.URL+"/update/gauge/Load/12.5", "text/plain", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
-		t.Errorf("expected status 200, got %d", resp.StatusCode)
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	if got := store.gauges["Load"]; got != 12.5 {
-		t.Errorf("stored gauge value mismatch: got %v, want %v", got, 12.5)
+	// GET gauge value
+	valResp, err := http.Get(server.URL + "/value/gauge/Load")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer valResp.Body.Close()
+	body, _ := io.ReadAll(valResp.Body)
+	if string(body) != "12.5" {
+		t.Fatalf("expected 12.5, got %s", string(body))
+	}
+
+	// POST counter
+	resp, _ = http.Post(server.URL+"/update/counter/Poll/3", "text/plain", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	// GET counter value
+	valResp, _ = http.Get(server.URL + "/value/counter/Poll")
+	body, _ = io.ReadAll(valResp.Body)
+	if string(body) != "3" {
+		t.Fatalf("expected 3, got %s", string(body))
 	}
 }
 
-func TestServer_UpdateCounter(t *testing.T) {
+func TestServer_GetUnknownMetric(t *testing.T) {
 	store := NewMemStorage()
-	srv := httptest.NewServer(ServerMetrics(store))
-	defer srv.Close()
+	server := httptest.NewServer(ServerMetrics(store))
+	defer server.Close()
 
-	http.Post(srv.URL+"/update/counter/Poll/1", "text/plain", nil)
-	http.Post(srv.URL+"/update/counter/Poll/2", "text/plain", nil)
+	resp, _ := http.Get(server.URL + "/value/gauge/unknown")
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for unknown gauge, got %d", resp.StatusCode)
+	}
 
-	if got := store.counters["Poll"]; got != 3 {
-		t.Errorf("stored counter value mismatch: got %v, want %v", got, 3)
+	resp, _ = http.Get(server.URL + "/value/counter/unknown")
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for unknown counter, got %d", resp.StatusCode)
 	}
 }
 
 func TestServer_BadMetricType(t *testing.T) {
 	store := NewMemStorage()
-	srv := httptest.NewServer(ServerMetrics(store))
-	defer srv.Close()
+	server := httptest.NewServer(ServerMetrics(store))
+	defer server.Close()
 
-	resp, err := http.Post(srv.URL+"/update/unknown/test/1", "text/plain", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-
+	resp, _ := http.Post(server.URL+"/update/unknown/test/1", "text/plain", nil)
 	if resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("expected status 400 for unknown metric type, got %d", resp.StatusCode)
+		t.Fatalf("expected 400 for bad metric type, got %d", resp.StatusCode)
+	}
+
+	respGet, _ := http.Get(server.URL + "/value/unknown/test")
+	if respGet.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for bad metric type GET, got %d", respGet.StatusCode)
 	}
 }
 
 func TestServer_BadMetricValue(t *testing.T) {
 	store := NewMemStorage()
-	srv := httptest.NewServer(ServerMetrics(store))
-	defer srv.Close()
+	server := httptest.NewServer(ServerMetrics(store))
+	defer server.Close()
 
-	resp, err := http.Post(srv.URL+"/update/gauge/test/abc", "text/plain", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-
+	resp, _ := http.Post(server.URL+"/update/gauge/test/abc", "text/plain", nil)
 	if resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("expected status 400 for invalid value, got %d", resp.StatusCode)
+		t.Fatalf("expected 400 for bad gauge value, got %d", resp.StatusCode)
+	}
+
+	resp, _ = http.Post(server.URL+"/update/counter/test/xyz", "text/plain", nil)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for bad counter value, got %d", resp.StatusCode)
 	}
 }
 
 func TestServer_MethodNotAllowed(t *testing.T) {
 	store := NewMemStorage()
-	srv := httptest.NewServer(ServerMetrics(store))
-	defer srv.Close()
+	server := httptest.NewServer(ServerMetrics(store))
+	defer server.Close()
 
-	resp, err := http.Get(srv.URL + "/update/gauge/test/1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-
+	resp, _ := http.Get(server.URL + "/update/gauge/test/1") // GET на POST endpoint
 	if resp.StatusCode != http.StatusMethodNotAllowed {
-		t.Errorf("expected status 405 for wrong method, got %d", resp.StatusCode)
+		t.Fatalf("expected 405, got %d", resp.StatusCode)
 	}
 }

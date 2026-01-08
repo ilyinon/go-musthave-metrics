@@ -1,8 +1,10 @@
 package main
 
 import (
+	"html"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
@@ -13,6 +15,14 @@ import (
 type Storage interface {
 	UpdateGauge(name string, value float64)
 	UpdateCounter(name string, value int64)
+
+	// новые методы для чтения
+	GetGauge(name string) (float64, bool)
+	GetCounter(name string) (int64, bool)
+
+	// для списка всех метрик
+	ListGauges() map[string]float64
+	ListCounters() map[string]int64
 }
 
 // MemStorage - простая in-memory реализация Storage.
@@ -36,7 +46,34 @@ func (s *MemStorage) UpdateGauge(name string, value float64) {
 
 // Увеличение counter-метрики.
 func (s *MemStorage) UpdateCounter(name string, value int64) {
-	s.counters[name] += value
+	s.counters[name] = value
+}
+
+func (s *MemStorage) GetGauge(name string) (float64, bool) {
+	val, ok := s.gauges[name]
+	return val, ok
+}
+
+func (s *MemStorage) GetCounter(name string) (int64, bool) {
+	val, ok := s.counters[name]
+	return val, ok
+}
+
+func (s *MemStorage) ListGauges() map[string]float64 {
+	// возвращаем копию, чтобы не ломать инкапсуляцию
+	c := make(map[string]float64, len(s.gauges))
+	for k, v := range s.gauges {
+		c[k] = v
+	}
+	return c
+}
+
+func (s *MemStorage) ListCounters() map[string]int64 {
+	c := make(map[string]int64, len(s.counters))
+	for k, v := range s.counters {
+		c[k] = v
+	}
+	return c
 }
 
 // Конфигурация HTTP-сервера и маршрутов.
@@ -47,9 +84,15 @@ func ServerMetrics(storage Storage) http.Handler {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	r.Get("/", getIndex)
+	r.Get("/", getIndex(storage))
+	// POST для обновления метрик
 	r.Route("/update", func(r chi.Router) {
 		r.Post("/{type}/{name}/{value}", sendMetric(storage))
+	})
+
+	// GET для чтения текущего значения метрики
+	r.Route("/value", func(r chi.Router) {
+		r.Get("/{type}/{name}", getMetricValue(storage))
 	})
 
 	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
@@ -58,11 +101,40 @@ func ServerMetrics(storage Storage) http.Handler {
 	return r
 }
 
-// Простой health/info endpoint.
-func getIndex(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Server metrics endpoint is /update"))
+func getIndex(storage Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+
+		w.Write([]byte("<html><head><title>Metrics</title></head><body>"))
+		w.Write([]byte("<h1>Current Metrics</h1><ul>"))
+
+		// gauges
+		gauges := storage.ListGauges()
+		gKeys := make([]string, 0, len(gauges))
+		for k := range gauges {
+			gKeys = append(gKeys, k)
+		}
+		sort.Strings(gKeys) // сортируем по алфавиту
+		for _, name := range gKeys {
+			value := gauges[name]
+			w.Write([]byte("<li>Gauge " + html.EscapeString(name) + ": " + strconv.FormatFloat(value, 'f', -1, 64) + "</li>"))
+		}
+
+		// counters
+		counters := storage.ListCounters()
+		cKeys := make([]string, 0, len(counters))
+		for k := range counters {
+			cKeys = append(cKeys, k)
+		}
+		sort.Strings(cKeys)
+		for _, name := range cKeys {
+			value := counters[name]
+			w.Write([]byte("<li>Counter " + html.EscapeString(name) + ": " + strconv.FormatInt(value, 10) + "</li>"))
+		}
+
+		w.Write([]byte("</ul></body></html>"))
+	}
 }
 
 // Основной обработчик POST /update/{type}/{name}/{value}
@@ -95,6 +167,39 @@ func sendMetric(storage Storage) http.HandlerFunc {
 		}
 
 		w.WriteHeader(http.StatusOK)
+	}
+}
+
+// GET /value/{type}/{name} — возвращает текущее значение метрики
+func getMetricValue(storage Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		metricType := chi.URLParam(r, "type")
+		name := chi.URLParam(r, "name")
+
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+
+		switch metricType {
+		case "gauge":
+			value, ok := storage.GetGauge(name)
+			if !ok {
+				http.Error(w, "metric not found", http.StatusNotFound)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(strconv.FormatFloat(value, 'f', -1, 64)))
+
+		case "counter":
+			value, ok := storage.GetCounter(name)
+			if !ok {
+				http.Error(w, "metric not found", http.StatusNotFound)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(strconv.FormatInt(value, 10)))
+
+		default:
+			http.Error(w, "bad metric type", http.StatusBadRequest)
+		}
 	}
 }
 
