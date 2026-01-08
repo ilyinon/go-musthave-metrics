@@ -1,5 +1,12 @@
 package models
 
-import "testing"
+import (
+	"testing"
+)
 
-func TestDummy(t *testing.T) {}
+func TestMetrics_IsGauge(t *testing.T) {
+	m := Metrics{MType: Gauge}
+	if !m.IsGauge() {
+		t.Fatal("expected IsGauge to return true")
+	}
+}
