@@ -46,7 +46,7 @@ func (s *MemStorage) UpdateGauge(name string, value float64) {
 
 // Увеличение counter-метрики.
 func (s *MemStorage) UpdateCounter(name string, value int64) {
-	s.counters[name] = value
+	s.counters[name] += value
 }
 
 func (s *MemStorage) GetGauge(name string) (float64, bool) {
