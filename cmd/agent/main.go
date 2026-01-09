@@ -19,10 +19,8 @@ var pollCount int64
 var runtimeMetricsGauge atomic.Value
 var runtimeMetricsCounter atomic.Value
 
-var (
-	pollInterval   = flag.Duration("poll-interval", 2*time.Second, "poll interval")
-	reportInterval = flag.Duration("report-interval", 10*time.Second, "report interval")
-)
+var reportInterval SecondsDuration = SecondsDuration(10 * time.Second)
+var pollInterval SecondsDuration = SecondsDuration(2 * time.Second)
 
 type RuntimeMetrics map[string]float64
 type CustomMetrics map[string]int64
@@ -30,6 +28,27 @@ type CustomMetrics map[string]int64
 type MetricsClient struct {
 	baseURL string
 	client  *resty.Client
+}
+
+type SecondsDuration time.Duration
+
+func (d *SecondsDuration) String() string {
+	return time.Duration(*d).String()
+}
+
+func (d *SecondsDuration) Set(s string) error {
+	// пробуем сначала распарсить как число секунд
+	if sec, err := strconv.Atoi(s); err == nil {
+		*d = SecondsDuration(time.Duration(sec) * time.Second)
+		return nil
+	}
+	// fallback: поддержка стандартного time.ParseDuration
+	td, err := time.ParseDuration(s)
+	if err != nil {
+		return err
+	}
+	*d = SecondsDuration(td)
+	return nil
 }
 
 func NewMetricsClient(baseURL string) *MetricsClient {
@@ -164,6 +183,9 @@ func main() {
 	}
 
 	flag.Var(a, "a", "Sending to server metrics http://host:port")
+	flag.Var(&pollInterval, "poll-interval", "poll interval in seconds")
+	flag.Var(&reportInterval, "report-interval", "report interval in seconds")
+
 	flag.Parse()
 	if a.Host == "" {
 		a.Host = "localhost"
@@ -175,15 +197,15 @@ func main() {
 
 	client := NewMetricsClient(a.String())
 
-	if *pollInterval <= 0 {
+	if time.Duration(pollInterval) <= 0 {
 		log.Fatal("poll-interval must be > 0")
 	}
-	if *reportInterval <= 0 {
+	if time.Duration(reportInterval) <= 0 {
 		log.Fatal("report-interval must be > 0")
 	}
 
-	pollTicker := time.NewTicker(*pollInterval)
-	reportTicker := time.NewTicker(*reportInterval)
+	pollTicker := time.NewTicker(time.Duration(pollInterval))
+	reportTicker := time.NewTicker(time.Duration(reportInterval))
 	defer pollTicker.Stop()
 	defer reportTicker.Stop()
 
