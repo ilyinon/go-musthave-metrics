@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -224,6 +225,12 @@ func (a *NetAddress) String() string {
 }
 
 func (a *NetAddress) Set(value string) error {
+	if value == "" {
+		return fmt.Errorf("empty address")
+	}
+	if !strings.Contains(value, ":") {
+		value = value + ":8080" // default port если не указан
+	}
 	host, portStr, err := net.SplitHostPort(value)
 	if err != nil {
 		return err
@@ -246,6 +253,7 @@ func main() {
 
 	storage := NewMemStorage()
 	// Запуск HTTP-сервера.
+	log.Printf("Starting server on %s", a.String())
 	log.Fatal(http.ListenAndServe(a.String(), ServerMetrics(storage)))
 
 }
