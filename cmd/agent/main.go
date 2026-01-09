@@ -158,22 +158,22 @@ func (a *NetAddress) Set(value string) error {
 }
 
 func main() {
-	addr := &NetAddress{
+	a := &NetAddress{
 		Host: "localhost",
 		Port: 8080,
 	}
 
-	flag.Var(addr, "addr", "Sending to server metrics http://host:port")
+	flag.Var(a, "a", "Sending to server metrics http://host:port")
 	flag.Parse()
-	if addr.Host == "" {
-		addr.Host = "localhost"
+	if a.Host == "" {
+		a.Host = "localhost"
 	}
 
-	if addr.Port == 0 {
+	if a.Port == 0 {
 		log.Fatal("invalid port")
 	}
 
-	client := NewMetricsClient(addr.String())
+	client := NewMetricsClient(a.String())
 
 	if *pollInterval <= 0 {
 		log.Fatal("poll-interval must be > 0")

@@ -234,15 +234,15 @@ func (a *NetAddress) Set(value string) error {
 func main() {
 	storage := NewMemStorage()
 
-	addr := &NetAddress{
+	a := &NetAddress{
 		Host: "localhost",
 		Port: 8080,
 	}
 
-	flag.Var(addr, "addr", "Net address host:port")
+	flag.Var(a, "a", "Net address host:port")
 	flag.Parse()
 
 	// Запуск HTTP-сервера.
-	log.Fatal(http.ListenAndServe(addr.String(), ServerMetrics(storage)))
+	log.Fatal(http.ListenAndServe(a.String(), ServerMetrics(storage)))
 
 }
