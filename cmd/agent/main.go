@@ -108,8 +108,10 @@ func CollectCustomMetrics() CustomMetrics {
 }
 
 func (mc *MetricsClient) SendGauge(name string, value float64) {
-	val := strconv.FormatFloat(value, 'f', -1, 64)
-	uri := fmt.Sprintf("%s/update/gauge/%s/%s", mc.baseURL, url.PathEscape(name), url.PathEscape(val))
+	// val := strconv.FormatFloat(value, 'f', -1, 64)
+	val := strconv.FormatFloat(value, 'g', -1, 64)
+
+	uri := fmt.Sprintf("%s/update/gauge/%s/%s", mc.baseURL, url.PathEscape(name), val)
 	mc.post(uri)
 }
 
