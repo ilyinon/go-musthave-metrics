@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"net"
 	"net/url"
+	"os"
 	"runtime"
 	"strconv"
 	"sync/atomic"
@@ -187,6 +188,12 @@ func main() {
 	flag.Var(&reportInterval, "report-interval", "report interval in seconds")
 
 	flag.Parse()
+	err := flag.CommandLine.Parse(os.Args[1:])
+	if err != nil {
+		// Просто выводим сообщение и продолжаем
+		fmt.Println("Warning: unknown flags ignored:", os.Args[1:])
+	}
+
 	if a.Host == "" {
 		a.Host = "localhost"
 	}
