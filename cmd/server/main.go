@@ -212,7 +212,15 @@ type NetAddress struct {
 }
 
 func (a *NetAddress) String() string {
-	return fmt.Sprintf("%s:%d", a.Host, a.Port)
+	host := a.Host
+	if host == "" {
+		host = "localhost"
+	}
+	port := a.Port
+	if port == 0 {
+		port = 8080
+	}
+	return fmt.Sprintf("%s:%d", host, port)
 }
 
 func (a *NetAddress) Set(value string) error {
@@ -220,28 +228,23 @@ func (a *NetAddress) Set(value string) error {
 	if err != nil {
 		return err
 	}
-
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
 		return err
 	}
-
 	a.Host = host
 	a.Port = port
 	return nil
 }
 
 func main() {
-	storage := NewMemStorage()
 
-	a := &NetAddress{
-		Host: "localhost",
-		Port: 8080,
-	}
+	a := &NetAddress{}
 
 	flag.Var(a, "a", "Net address host:port")
 	flag.Parse()
 
+	storage := NewMemStorage()
 	// Запуск HTTP-сервера.
 	log.Fatal(http.ListenAndServe(a.String(), ServerMetrics(storage)))
 
