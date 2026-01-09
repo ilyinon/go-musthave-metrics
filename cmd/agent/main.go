@@ -1,10 +1,14 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"math/rand"
+	"net"
+	"net/url"
 	"runtime"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -12,9 +16,16 @@ import (
 )
 
 var pollCount int64
+var runtimeMetricsGauge atomic.Value
+var runtimeMetricsCounter atomic.Value
+
+var (
+	pollInterval   = flag.Duration("poll-interval", 2*time.Second, "poll interval")
+	reportInterval = flag.Duration("report-interval", 10*time.Second, "report interval")
+)
 
 type RuntimeMetrics map[string]float64
-type CustomMetrics map[string]int
+type CustomMetrics map[string]int64
 
 type MetricsClient struct {
 	baseURL string
@@ -23,6 +34,7 @@ type MetricsClient struct {
 
 func NewMetricsClient(baseURL string) *MetricsClient {
 	client := resty.New().
+		SetTimeout(3*time.Second).
 		SetHeader("Content-Type", "text/plain")
 	return &MetricsClient{
 		baseURL: baseURL,
@@ -90,58 +102,113 @@ func CollectRuntimeMetrics() RuntimeMetrics {
 }
 
 func CollectCustomMetrics() CustomMetrics {
-	counter := atomic.AddInt64(&pollCount, 1)
-
-	// Заполняем map метрик
 	return CustomMetrics{
-		"PollCount": int(counter),
+		"PollCount": atomic.AddInt64(&pollCount, 1),
 	}
-}
-
-type Number interface {
-	~int64 | ~float64
 }
 
 func (mc *MetricsClient) SendGauge(name string, value float64) {
-	send(mc, "gauge", name, value)
+	val := strconv.FormatFloat(value, 'f', -1, 64)
+	uri := fmt.Sprintf("%s/update/gauge/%s/%s", mc.baseURL, url.PathEscape(name), url.PathEscape(val))
+	mc.post(uri)
 }
 
 func (mc *MetricsClient) SendCounter(name string, value int64) {
-	send(mc, "counter", name, value)
+	uri := fmt.Sprintf("%s/update/counter/%s/%d", mc.baseURL, name, value)
+	mc.post(uri)
 }
 
-func send[T Number](mc *MetricsClient, t, name string, value T) {
-	uri := fmt.Sprintf("%s/update/%s/%s/%v", mc.baseURL, t, name, value)
-
+func (mc *MetricsClient) post(uri string) {
 	resp, err := mc.client.R().Post(uri)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("send failed: %v", err)
+		return
 	}
 
-	fmt.Println(resp.Status())
+	log.Printf("[DEBUG] POST %s -> %s", uri, resp.Status())
+}
+
+type NetAddress struct {
+	Host string
+	Port int
+}
+
+func (a *NetAddress) String() string {
+	return fmt.Sprintf("http://%s:%d", a.Host, a.Port)
+}
+
+func (a *NetAddress) Set(value string) error {
+	host, portStr, err := net.SplitHostPort(value)
+	if err != nil {
+		return err
+	}
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return err
+	}
+
+	a.Host = host
+	a.Port = port
+
+	if a.Host == "" {
+		a.Host = "localhost"
+	}
+	return nil
 }
 
 func main() {
-	client := NewMetricsClient("http://localhost:8080")
-
-	var pollInterval int = 2
-	var reportInterval int = 10
-
-	for {
-		time.Sleep(time.Duration(pollInterval) * time.Second)
-
-		// metrics := CollectRuntimeMetrics()
-
-		time.Sleep(time.Duration(reportInterval-pollInterval) * time.Second)
-
-		for name, value := range CollectRuntimeMetrics() {
-			// Отправить в /update/gauge/{name}/{value}
-			client.SendGauge(name, value)
-		}
-		for name, value := range CollectCustomMetrics() {
-			// Отправить в /update/counter/{name}/{value}
-			client.SendCounter(name, int64(value))
-		}
+	addr := &NetAddress{
+		Host: "localhost",
+		Port: 8080,
 	}
 
+	flag.Var(addr, "addr", "Sending to server metrics http://host:port")
+	flag.Parse()
+	if addr.Host == "" {
+		addr.Host = "localhost"
+	}
+
+	if addr.Port == 0 {
+		log.Fatal("invalid port")
+	}
+
+	client := NewMetricsClient(addr.String())
+
+	if *pollInterval <= 0 {
+		log.Fatal("poll-interval must be > 0")
+	}
+	if *reportInterval <= 0 {
+		log.Fatal("report-interval must be > 0")
+	}
+
+	pollTicker := time.NewTicker(*pollInterval)
+	reportTicker := time.NewTicker(*reportInterval)
+	defer pollTicker.Stop()
+	defer reportTicker.Stop()
+
+	for {
+		select {
+
+		case <-pollTicker.C:
+			runtimeMetricsGauge.Store(CollectRuntimeMetrics())
+			runtimeMetricsCounter.Store(CollectCustomMetrics())
+
+		case <-reportTicker.C:
+
+			if m, ok := runtimeMetricsGauge.Load().(RuntimeMetrics); ok {
+				for name, value := range m {
+					client.SendGauge(name, value)
+				}
+			}
+
+			if m, ok := runtimeMetricsCounter.Load().(CustomMetrics); ok {
+				for name, value := range m {
+					client.SendCounter(name, value)
+				}
+			}
+
+		}
+
+	}
 }

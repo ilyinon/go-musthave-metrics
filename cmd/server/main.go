@@ -1,8 +1,11 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"html"
 	"log"
+	"net"
 	"net/http"
 	"sort"
 	"strconv"
@@ -203,10 +206,43 @@ func getMetricValue(storage Storage) http.HandlerFunc {
 	}
 }
 
+type NetAddress struct {
+	Host string
+	Port int
+}
+
+func (a *NetAddress) String() string {
+	return fmt.Sprintf("%s:%d", a.Host, a.Port)
+}
+
+func (a *NetAddress) Set(value string) error {
+	host, portStr, err := net.SplitHostPort(value)
+	if err != nil {
+		return err
+	}
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return err
+	}
+
+	a.Host = host
+	a.Port = port
+	return nil
+}
+
 func main() {
 	storage := NewMemStorage()
 
+	addr := &NetAddress{
+		Host: "localhost",
+		Port: 8080,
+	}
+
+	flag.Var(addr, "addr", "Net address host:port")
+	flag.Parse()
+
 	// Запуск HTTP-сервера.
-	log.Fatal(http.ListenAndServe(":8080", ServerMetrics(storage)))
+	log.Fatal(http.ListenAndServe(addr.String(), ServerMetrics(storage)))
 
 }
