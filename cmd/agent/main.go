@@ -183,8 +183,8 @@ func main() {
 	}
 
 	flag.Var(a, "a", "Sending to server metrics http://host:port")
-	flag.Var(&pollInterval, "poll-interval", "poll interval in seconds")
-	flag.Var(&reportInterval, "report-interval", "report interval in seconds")
+	flag.Var(&pollInterval, "p", "poll interval in seconds")
+	flag.Var(&reportInterval, "r", "report interval in seconds")
 
 	flag.Parse()
 	if a.Host == "" {
