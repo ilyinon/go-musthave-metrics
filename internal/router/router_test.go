@@ -16,12 +16,24 @@ func TestRouter_FullFlow(t *testing.T) {
 	server := httptest.NewServer(r)
 	defer server.Close()
 
-	http.Post(server.URL+"/update/gauge/Load/12.5", "text/plain", nil)
+	// POST
+	postResp, err := http.Post(server.URL+"/update/gauge/Load/12.5", "text/plain", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	postResp.Body.Close()
 
-	resp, _ := http.Get(server.URL + "/value/gauge/Load")
-	body, _ := io.ReadAll(resp.Body)
-
+	// GET
+	resp, err := http.Get(server.URL + "/value/gauge/Load")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if string(body) != "12.5" {
 		t.Fatalf("expected 12.5, got %s", body)
