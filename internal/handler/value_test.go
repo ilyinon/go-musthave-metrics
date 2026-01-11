@@ -23,5 +23,5 @@ func TestValueHandler_UnknownMetric(t *testing.T) {
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", resp.StatusCode)
 	}
+	defer resp.Body.Close()
 }
-

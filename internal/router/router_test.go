@@ -21,6 +21,8 @@ func TestRouter_FullFlow(t *testing.T) {
 	resp, _ := http.Get(server.URL + "/value/gauge/Load")
 	body, _ := io.ReadAll(resp.Body)
 
+	defer resp.Body.Close()
+
 	if string(body) != "12.5" {
 		t.Fatalf("expected 12.5, got %s", body)
 	}
@@ -37,5 +39,5 @@ func TestRouter_MethodNotAllowed(t *testing.T) {
 	if resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405, got %d", resp.StatusCode)
 	}
+	defer resp.Body.Close()
 }
-

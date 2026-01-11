@@ -23,6 +23,7 @@ func TestUpdateHandler_BadMetricType(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", resp.StatusCode)
 	}
+	defer resp.Body.Close()
 }
 
 func TestUpdateHandler_BadMetricValue(t *testing.T) {
@@ -39,5 +40,5 @@ func TestUpdateHandler_BadMetricValue(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", resp.StatusCode)
 	}
+	defer resp.Body.Close()
 }
-
