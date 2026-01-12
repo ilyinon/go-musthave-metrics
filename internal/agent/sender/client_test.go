@@ -47,4 +47,3 @@ func TestSendGaugeAndCounter(t *testing.T) {
 		}
 	}
 }
-

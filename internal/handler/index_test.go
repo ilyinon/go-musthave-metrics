@@ -35,4 +35,3 @@ func TestIndexHandler(t *testing.T) {
 		t.Fatal("counter not found in response")
 	}
 }
-

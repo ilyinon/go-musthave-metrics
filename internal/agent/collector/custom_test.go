@@ -22,4 +22,3 @@ func TestCustomMetricsCounter(t *testing.T) {
 		t.Errorf("third = %d, want 3", third["PollCount"])
 	}
 }
-

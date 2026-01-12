@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"log"
 	"sync/atomic"
 	"time"
 
@@ -41,12 +42,16 @@ func (a *App) Run() {
 		case <-reportTicker.C:
 			if g, ok := a.gauges.Load().(model.RuntimeMetrics); ok {
 				for k, v := range g {
-					a.client.Gauge(k, v)
+					if err := a.client.Gauge(k, v); err != nil {
+						log.Printf("failed to send gauge %s: %v", k, err)
+					}
 				}
 			}
 			if c, ok := a.counters.Load().(model.CustomMetrics); ok {
 				for k, v := range c {
-					a.client.Counter(k, v)
+					if err := a.client.Counter(k, v); err != nil {
+						log.Printf("failed to send counter %s: %v", k, err)
+					}
 				}
 			}
 		}

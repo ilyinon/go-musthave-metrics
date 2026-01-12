@@ -36,4 +36,3 @@ func TestStorage_List(t *testing.T) {
 		t.Fatal("expected 1 counter")
 	}
 }
-
