@@ -1,15 +1,13 @@
 package sender
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/go-resty/resty/v2"
-
-	"github.com/ilyinon/go-musthave-metrics/internal/model"
 )
 
 type Client struct {
@@ -17,45 +15,42 @@ type Client struct {
 	client  *resty.Client
 }
 
+func (c *Client) BaseURL() string {
+	return c.baseURL
+}
+
 func New(baseURL string) *Client {
 	return &Client{
 		baseURL: baseURL,
 		client: resty.New().
 			SetTimeout(3*time.Second).
-			SetHeader("Content-Type", "application/json"),
+			SetHeader("Content-Type", "text/plain"),
 	}
 }
 
 func (c *Client) Gauge(name string, value float64) error {
-	m := model.Metrics{
-		ID:    name,
-		MType: "gauge",
-		Value: &value,
-	}
-	return c.postJSON(m)
+	val := strconv.FormatFloat(value, 'g', -1, 64)
+	uri := fmt.Sprintf(
+		"%s/update/gauge/%s/%s",
+		c.baseURL,
+		url.PathEscape(name),
+		val,
+	)
+	return c.post(uri)
 }
 
 func (c *Client) Counter(name string, value int64) error {
-	m := model.Metrics{
-		ID:    name,
-		MType: "counter",
-		Delta: &value,
-	}
-	return c.postJSON(m)
+	uri := fmt.Sprintf(
+		"%s/update/counter/%s/%d",
+		c.baseURL,
+		url.PathEscape(name),
+		value,
+	)
+	return c.post(uri)
 }
 
-func (c *Client) postJSON(m model.Metrics) error {
-	body, err := json.Marshal(m)
-	if err != nil {
-		return err
-	}
-
-	uri := fmt.Sprintf("%s/update", c.baseURL)
-
-	resp, err := c.client.R().
-		SetBody(bytes.NewReader(body)).
-		Post(uri)
-
+func (c *Client) post(uri string) error {
+	resp, err := c.client.R().Post(uri)
 	if err != nil {
 		return fmt.Errorf("post %s failed: %w", uri, err)
 	}

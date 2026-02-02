@@ -44,7 +44,7 @@ func main() {
 	flag.Parse()
 
 	client := sender.New(addr.String())
-	app := agent.New(client, time.Duration(poll), time.Duration(report))
+	app := agent.New(client, addr.String(), time.Duration(poll), time.Duration(report))
 
 	log.Printf(
 		"agent started, server=%s poll=%s report=%s",

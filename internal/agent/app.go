@@ -11,7 +11,8 @@ import (
 )
 
 type App struct {
-	client         *sender.Client
+	client         *sender.Client // оставлен для совместимости
+	serverURL      string
 	pollInterval   time.Duration
 	reportInterval time.Duration
 
@@ -19,9 +20,14 @@ type App struct {
 	counters atomic.Value
 }
 
-func New(client *sender.Client, poll, report time.Duration) *App {
+func New(
+	client *sender.Client,
+	serverURL string,
+	poll, report time.Duration,
+) *App {
 	return &App{
 		client:         client,
+		serverURL:      serverURL,
 		pollInterval:   poll,
 		reportInterval: report,
 	}
@@ -42,14 +48,25 @@ func (a *App) Run() {
 		case <-reportTicker.C:
 			if g, ok := a.gauges.Load().(model.RuntimeMetrics); ok {
 				for k, v := range g {
-					if err := a.client.Gauge(k, v); err != nil {
+					val := v
+					if err := sendJSON(a.serverURL, model.Metrics{
+						ID:    k,
+						MType: "gauge",
+						Value: &val,
+					}); err != nil {
 						log.Printf("failed to send gauge %s: %v", k, err)
 					}
 				}
 			}
+
 			if c, ok := a.counters.Load().(model.CustomMetrics); ok {
 				for k, v := range c {
-					if err := a.client.Counter(k, v); err != nil {
+					delta := v
+					if err := sendJSON(a.serverURL, model.Metrics{
+						ID:    k,
+						MType: "counter",
+						Delta: &delta,
+					}); err != nil {
 						log.Printf("failed to send counter %s: %v", k, err)
 					}
 				}
