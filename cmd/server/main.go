@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ilyinon/go-musthave-metrics/internal/config"
+	filestorage "github.com/ilyinon/go-musthave-metrics/internal/repository/file"
 	"github.com/ilyinon/go-musthave-metrics/internal/repository/mem"
 	"github.com/ilyinon/go-musthave-metrics/internal/router"
 )
@@ -48,6 +49,22 @@ func main() {
 	flag.Parse()
 
 	storage := mem.New()
+	fs := filestorage.New(storage, storeFile)
+
+	if restore {
+		_ = fs.Restore()
+	}
+
+	if storeInterval > 0 {
+		go func() {
+			t := time.NewTicker(storeInterval)
+			defer t.Stop()
+			for range t.C {
+				_ = fs.Save()
+			}
+		}()
+	}
+
 	handler := router.New(storage)
 
 	log.Printf("starting server on %s", addr.String())
