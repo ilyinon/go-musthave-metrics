@@ -19,9 +19,12 @@ func New(storage repository.Storage) http.Handler {
 	r.Use(middleware.Recoverer)
 
 	r.Get("/", handler.NewIndex(storage).ServeHTTP)
+
 	r.Post("/update/{type}/{name}/{value}", handler.NewUpdate(storage).ServeHTTP)
 	r.Post("/update", handler.NewUpdateJSON(storage).ServeHTTP)
+	r.Post("/update/", handler.NewUpdateJSON(storage).ServeHTTP)
 	r.Post("/value", handler.NewValueJSON(storage).ServeHTTP)
+	r.Post("/value/", handler.NewValueJSON(storage).ServeHTTP)
 
 	r.Get("/value/{type}/{name}", handler.NewValue(storage).ServeHTTP)
 
