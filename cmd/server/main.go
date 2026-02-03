@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/ilyinon/go-musthave-metrics/internal/config"
 	"github.com/ilyinon/go-musthave-metrics/internal/repository/mem"
@@ -12,19 +14,39 @@ import (
 )
 
 func main() {
-	// ===== default =====
+	storeInterval := 300 * time.Second
+	storeFile := "./metrics-db.json"
+	restore := true
+
 	addr := &config.ServerAddress{
 		Host: "localhost",
 		Port: 8080,
 	}
 
-	// ===== env override =====
 	if v, ok := os.LookupEnv("ADDRESS"); ok {
-		_ = addr.Set(v)
+		if sec, err := strconv.Atoi(v); err == nil {
+			storeInterval = time.Duration(sec) * time.Second
+		}
 	}
 
-	// ===== flag override env =====
+	if v, ok := os.LookupEnv("STORE_INTERVAL"); ok {
+		if sec, err := strconv.Atoi(v); err == nil {
+			storeInterval = time.Duration(sec) * time.Second
+		}
+	}
+	if v, ok := os.LookupEnv("FILE_STORAGE_PATH"); ok {
+		storeFile = v
+	}
+	if v, ok := os.LookupEnv("RESTORE"); ok {
+		if b, err := strconv.ParseBool(v); err == nil {
+			restore = b
+		}
+	}
+
 	flag.Var(addr, "a", "server address")
+	flag.DurationVar(&storeInterval, "i", storeInterval, "store interval")
+	flag.StringVar(&storeFile, "f", storeFile, "storage file")
+	flag.BoolVar(&restore, "r", restore, "restore metrics")
 	flag.Parse()
 
 	storage := mem.New()
