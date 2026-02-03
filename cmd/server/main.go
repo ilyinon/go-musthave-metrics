@@ -24,9 +24,7 @@ func main() {
 	}
 
 	if v, ok := os.LookupEnv("ADDRESS"); ok {
-		if sec, err := strconv.Atoi(v); err == nil {
-			storeInterval = time.Duration(sec) * time.Second
-		}
+		_ = addr.Set(v)
 	}
 
 	if v, ok := os.LookupEnv("STORE_INTERVAL"); ok {
