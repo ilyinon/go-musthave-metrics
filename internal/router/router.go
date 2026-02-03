@@ -15,6 +15,7 @@ func New(storage repository.Storage) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RealIP)
+	r.Use(appmw.Gzip)
 	r.Use(appmw.Logger)
 	r.Use(middleware.Recoverer)
 

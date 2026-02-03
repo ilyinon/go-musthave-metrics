@@ -2,8 +2,8 @@ package agent
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -15,7 +15,15 @@ var httpClient = &http.Client{
 }
 
 func sendJSON(serverURL string, m model.Metrics) error {
-	body, err := json.Marshal(m)
+	raw, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	_, err = gz.Write(raw)
+	gz.Close()
 	if err != nil {
 		return err
 	}
@@ -23,23 +31,21 @@ func sendJSON(serverURL string, m model.Metrics) error {
 	req, err := http.NewRequest(
 		http.MethodPost,
 		serverURL+"/update",
-		bytes.NewReader(body),
+		&buf,
 	)
 	if err != nil {
 		return err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Encoding", "gzip")
+	req.Header.Set("Accept-Encoding", "gzip")
 
-	resp, err := httpClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("server returned status %d", resp.StatusCode)
-	}
+	resp.Body.Close()
 
 	return nil
 }
