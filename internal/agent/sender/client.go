@@ -15,6 +15,10 @@ type Client struct {
 	client  *resty.Client
 }
 
+func (c *Client) BaseURL() string {
+	return c.baseURL
+}
+
 func New(baseURL string) *Client {
 	return &Client{
 		baseURL: baseURL,

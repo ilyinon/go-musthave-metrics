@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/ilyinon/go-musthave-metrics/internal/model"
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
 
 	"github.com/go-chi/chi/v5"
@@ -23,7 +24,7 @@ func (h *UpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	valueStr := chi.URLParam(r, "value")
 
 	switch metricType {
-	case "gauge":
+	case model.MetricGauge:
 		v, err := strconv.ParseFloat(valueStr, 64)
 		if err != nil {
 			http.Error(w, "bad value", http.StatusBadRequest)
@@ -31,7 +32,7 @@ func (h *UpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		h.storage.UpdateGauge(name, v)
 
-	case "counter":
+	case model.MetricCounter:
 		v, err := strconv.ParseInt(valueStr, 10, 64)
 		if err != nil {
 			http.Error(w, "bad value", http.StatusBadRequest)

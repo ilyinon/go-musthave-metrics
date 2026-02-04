@@ -9,4 +9,7 @@ type Storage interface {
 
 	ListGauges() map[string]float64
 	ListCounters() map[string]int64
+
+	GetAllGauges() map[string]float64
+	GetAllCounters() map[string]int64
 }
