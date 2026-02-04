@@ -25,7 +25,7 @@ func main() {
 	}
 
 	if v, ok := os.LookupEnv("ADDRESS"); ok {
-		_ = addr.Set(v)
+		addr.Set(v)
 	}
 
 	if v, ok := os.LookupEnv("STORE_INTERVAL"); ok {

@@ -1,5 +1,10 @@
 package model
 
+const (
+	MetricGauge   = "gauge"
+	MetricCounter = "counter"
+)
+
 type RuntimeMetrics map[string]float64
 type CustomMetrics map[string]int64
 

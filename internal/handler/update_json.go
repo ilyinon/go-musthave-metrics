@@ -29,14 +29,14 @@ func (h *UpdateJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch m.MType {
-	case "gauge":
+	case model.MetricGauge:
 		if m.Value == nil {
 			http.Error(w, "missing value", http.StatusBadRequest)
 			return
 		}
 		h.storage.UpdateGauge(m.ID, *m.Value)
 
-	case "counter":
+	case model.MetricCounter:
 		if m.Delta == nil {
 			http.Error(w, "missing delta", http.StatusBadRequest)
 			return
@@ -44,7 +44,7 @@ func (h *UpdateJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.storage.UpdateCounter(m.ID, *m.Delta)
 
 	default:
-		http.Error(w, "bad metric type", http.StatusBadRequest)
+		http.Error(w, "unknown metric type", http.StatusBadRequest)
 		return
 	}
 
