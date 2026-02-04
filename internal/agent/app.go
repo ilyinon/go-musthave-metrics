@@ -51,7 +51,7 @@ func (a *App) Run() {
 					val := v
 					if err := sendJSON(a.serverURL, model.Metrics{
 						ID:    k,
-						MType: "gauge",
+						MType: model.MetricGauge,
 						Value: &val,
 					}); err != nil {
 						log.Printf("failed to send gauge %s: %v", k, err)
@@ -64,7 +64,7 @@ func (a *App) Run() {
 					delta := v
 					if err := sendJSON(a.serverURL, model.Metrics{
 						ID:    k,
-						MType: "counter",
+						MType: model.MetricCounter,
 						Delta: &delta,
 					}); err != nil {
 						log.Printf("failed to send counter %s: %v", k, err)

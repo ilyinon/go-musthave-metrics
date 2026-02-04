@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/ilyinon/go-musthave-metrics/internal/model"
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
 
 	"github.com/go-chi/chi/v5"
@@ -22,7 +23,7 @@ func (h *ValueHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 
 	switch metricType {
-	case "gauge":
+	case model.MetricGauge:
 		v, ok := h.storage.GetGauge(name)
 		if !ok {
 			http.NotFound(w, r)
@@ -30,7 +31,7 @@ func (h *ValueHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Write([]byte(strconv.FormatFloat(v, 'f', -1, 64)))
 
-	case "counter":
+	case model.MetricCounter:
 		v, ok := h.storage.GetCounter(name)
 		if !ok {
 			http.NotFound(w, r)

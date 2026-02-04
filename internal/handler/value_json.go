@@ -34,7 +34,7 @@ func (h *ValueJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch req.MType {
-	case "gauge":
+	case model.MetricGauge:
 		v, ok := h.storage.GetGauge(req.ID)
 		if !ok {
 			http.NotFound(w, r)
@@ -42,7 +42,7 @@ func (h *ValueJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		resp.Value = &v
 
-	case "counter":
+	case model.MetricCounter:
 		v, ok := h.storage.GetCounter(req.ID)
 		if !ok {
 			http.NotFound(w, r)

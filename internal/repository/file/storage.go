@@ -32,14 +32,14 @@ func (s *Storage) Save() error {
 	for k, v := range s.mem.GetAllGauges() {
 		val := v
 		data = append(data, model.Metrics{
-			ID: k, MType: "gauge", Value: &val,
+			ID: k, MType: model.MetricGauge, Value: &val,
 		})
 	}
 
 	for k, v := range s.mem.GetAllCounters() {
 		d := v
 		data = append(data, model.Metrics{
-			ID: k, MType: "counter", Delta: &d,
+			ID: k, MType: model.MetricCounter, Delta: &d,
 		})
 	}
 
@@ -68,11 +68,11 @@ func (s *Storage) Restore() error {
 
 	for _, m := range data {
 		switch m.MType {
-		case "gauge":
+		case model.MetricGauge:
 			if m.Value != nil {
 				s.mem.UpdateGauge(m.ID, *m.Value)
 			}
-		case "counter":
+		case model.MetricCounter:
 			if m.Delta != nil {
 				s.mem.UpdateCounter(m.ID, *m.Delta)
 			}
