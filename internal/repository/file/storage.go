@@ -1,6 +1,7 @@
 package filestorage
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"sync"
@@ -20,6 +21,10 @@ func New(mem repository.Storage, path string) *Storage {
 		mem:  mem,
 		path: path,
 	}
+}
+
+func (s *Storage) Ping(ctx context.Context) error {
+	return nil
 }
 
 // Save сохраняет все метрики в файл

@@ -1,10 +1,12 @@
 package handler
 
 import (
+	"context"
 	"html"
 	"net/http"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
 )
@@ -17,6 +19,22 @@ func NewIndex(storage repository.Storage) *IndexHandler {
 	return &IndexHandler{storage: storage}
 }
 
+// Ping checks database connection.
+// GET /ping
+func (h *IndexHandler) Ping(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+
+	if err := h.storage.Ping(ctx); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// ServeHTTP renders HTML page with metrics.
+// GET /
 func (h *IndexHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)

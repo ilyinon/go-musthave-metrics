@@ -1,6 +1,7 @@
 package mem
 
 import (
+	"context"
 	"sync"
 
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
@@ -17,6 +18,10 @@ func New() repository.Storage {
 		gauges:   make(map[string]float64),
 		counters: make(map[string]int64),
 	}
+}
+
+func (s *Storage) Ping(ctx context.Context) error {
+	return nil
 }
 
 func (s *Storage) UpdateGauge(name string, value float64) {
