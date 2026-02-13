@@ -34,7 +34,6 @@ func main() {
 	if v, ok := os.LookupEnv("ADDRESS"); ok {
 		addr.Set(v)
 	}
-
 	if v, ok := os.LookupEnv("STORE_INTERVAL"); ok {
 		if sec, err := strconv.Atoi(v); err == nil {
 			storeInterval = time.Duration(sec) * time.Second
@@ -46,11 +45,6 @@ func main() {
 	if v, ok := os.LookupEnv("RESTORE"); ok {
 		if b, err := strconv.ParseBool(v); err == nil {
 			restore = b
-		}
-	}
-	if dsn == "" {
-		if v, ok := os.LookupEnv("DATABASE_DSN"); ok {
-			dsn = v
 		}
 	}
 
@@ -74,6 +68,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+		_ = db.Stats()
 		defer db.Close()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
