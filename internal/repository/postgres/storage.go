@@ -38,7 +38,7 @@ func (s *Storage) GetGauge(name string) (float64, bool) {
 }
 
 func (s *Storage) ListGauges() map[string]float64 {
-	return map[string]float64{}
+	return s.GetAllGauges()
 }
 
 func (s *Storage) GetAllGauges() map[string]float64 {
@@ -55,6 +55,11 @@ func (s *Storage) GetAllGauges() map[string]float64 {
 		_ = rows.Scan(&k, &v)
 		res[k] = v
 	}
+
+	if err := rows.Err(); err != nil {
+		return map[string]float64{}
+	}
+
 	return res
 }
 
@@ -79,7 +84,7 @@ func (s *Storage) GetCounter(name string) (int64, bool) {
 }
 
 func (s *Storage) ListCounters() map[string]int64 {
-	return map[string]int64{}
+	return s.GetAllCounters()
 }
 
 func (s *Storage) GetAllCounters() map[string]int64 {
@@ -96,5 +101,10 @@ func (s *Storage) GetAllCounters() map[string]int64 {
 		_ = rows.Scan(&k, &v)
 		res[k] = v
 	}
+
+	if err := rows.Err(); err != nil {
+		return map[string]int64{}
+	}
+
 	return res
 }
