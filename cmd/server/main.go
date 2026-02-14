@@ -10,6 +10,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
+	migratepg "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/ilyinon/go-musthave-metrics/internal/config"
@@ -21,6 +24,7 @@ import (
 )
 
 func main() {
+	// defaults
 	storeInterval := 300 * time.Second
 	storeFile := "./metrics-db.json"
 	restore := true
@@ -31,6 +35,7 @@ func main() {
 		Port: 8080,
 	}
 
+	// env (basic settings)
 	if v, ok := os.LookupEnv("ADDRESS"); ok {
 		addr.Set(v)
 	}
@@ -48,6 +53,7 @@ func main() {
 		}
 	}
 
+	// flags
 	flag.Var(addr, "a", "server address")
 	flag.StringVar(&dsn, "d", "", "database dsn")
 	flag.DurationVar(&storeInterval, "i", storeInterval, "store interval")
@@ -55,21 +61,23 @@ func main() {
 	flag.BoolVar(&restore, "r", restore, "restore metrics")
 	flag.Parse()
 
+	// env fallback for DSN
 	if dsn == "" {
-		if v, ok := os.LookupEnv("DATABASE_DSN"); ok {
-			dsn = v
-		}
+		dsn = os.Getenv("DATABASE_DSN")
 	}
 
 	var storage repository.Storage
 
+	// choose storage
 	if dsn != "" {
 		db, err := sql.Open("pgx", dsn)
 		if err != nil {
 			log.Fatal(err)
 		}
-		_ = db.Stats()
 		defer db.Close()
+
+		// explicit usage for tests
+		_ = db.Stats()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -78,9 +86,28 @@ func main() {
 			log.Fatal(err)
 		}
 
+		// run migrations
+		driver, err := migratepg.WithInstance(db, &migratepg.Config{})
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		m, err := migrate.NewWithDatabaseInstance(
+			"file://migrations",
+			"postgres",
+			driver,
+		)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+			log.Fatal(err)
+		}
+
 		storage = postgres.New(db)
 		log.Println("using postgres storage")
-	} else {
+	} else if storeFile != "" {
 		memStorage := mem.New()
 		storage = memStorage
 
@@ -100,7 +127,10 @@ func main() {
 			}()
 		}
 
-		log.Println("using memory/file storage")
+		log.Println("using file storage")
+	} else {
+		storage = mem.New()
+		log.Println("using memory storage")
 	}
 
 	handler := router.New(storage)
