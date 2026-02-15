@@ -32,6 +32,7 @@ func New(storage repository.Storage) http.Handler {
 	r.Post("/value/", handler.NewValueJSON(storage).ServeHTTP)
 	r.Get("/value/{type}/{name}", handler.NewValue(storage).ServeHTTP)
 
+	r.Post("/updates/", handler.NewUpdates(storage).ServeHTTP)
+
 	return r
 }
-

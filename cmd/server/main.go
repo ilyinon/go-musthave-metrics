@@ -24,7 +24,6 @@ import (
 )
 
 func main() {
-	// defaults
 	storeInterval := 300 * time.Second
 	storeFile := "./metrics-db.json"
 	restore := true
@@ -35,7 +34,6 @@ func main() {
 		Port: 8080,
 	}
 
-	// env (basic settings)
 	if v, ok := os.LookupEnv("ADDRESS"); ok {
 		addr.Set(v)
 	}
@@ -53,7 +51,6 @@ func main() {
 		}
 	}
 
-	// flags
 	flag.Var(addr, "a", "server address")
 	flag.StringVar(&dsn, "d", "", "database dsn")
 	flag.DurationVar(&storeInterval, "i", storeInterval, "store interval")
@@ -61,14 +58,12 @@ func main() {
 	flag.BoolVar(&restore, "r", restore, "restore metrics")
 	flag.Parse()
 
-	// env fallback for DSN
 	if dsn == "" {
 		dsn = os.Getenv("DATABASE_DSN")
 	}
 
 	var storage repository.Storage
 
-	// choose storage
 	if dsn != "" {
 		db, err := sql.Open("pgx", dsn)
 		if err != nil {
@@ -76,7 +71,6 @@ func main() {
 		}
 		defer db.Close()
 
-		// explicit usage for tests
 		_ = db.Stats()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -86,7 +80,6 @@ func main() {
 			log.Fatal(err)
 		}
 
-		// run migrations
 		driver, err := migratepg.WithInstance(db, &migratepg.Config{})
 		if err != nil {
 			log.Fatal(err)
