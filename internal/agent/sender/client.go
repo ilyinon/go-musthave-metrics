@@ -1,6 +1,9 @@
 package sender
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
@@ -8,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/ilyinon/go-musthave-metrics/internal/model"
 )
 
 type Client struct {
@@ -65,5 +69,44 @@ func (c *Client) post(uri string) error {
 	}
 
 	log.Printf("[DEBUG] POST %s -> %s", uri, resp.Status())
+	return nil
+}
+
+func (c *Client) Batch(metrics []model.Metrics) error {
+	if len(metrics) == 0 {
+		return nil
+	}
+
+	raw, err := json.Marshal(metrics)
+	if err != nil {
+		return err
+	}
+
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	if _, err := gz.Write(raw); err != nil {
+		return err
+	}
+	_ = gz.Close()
+
+	resp, err := c.client.R().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("Content-Encoding", "gzip").
+		SetBody(&buf).
+		Post(c.baseURL + "/updates/")
+
+	if err != nil {
+		return err
+	}
+
+	if resp.IsError() {
+		return fmt.Errorf(
+			"batch post failed: status=%d body=%s",
+			resp.StatusCode(),
+			resp.String(),
+		)
+	}
+
+	log.Printf("[DEBUG] POST %s/updates/ -> %s", c.baseURL, resp.Status())
 	return nil
 }
