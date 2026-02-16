@@ -139,7 +139,8 @@ func (c *Client) batchOnce(metrics []model.Metrics) error {
 func isRetriableHTTPError(err error) bool {
 	var ne net.Error
 	if errors.As(err, &ne) {
-		return ne.Timeout() || ne.Temporary()
+		return ne.Timeout()
 	}
+
 	return true
 }
