@@ -1,15 +1,19 @@
 package repository
 
+import "context"
+
 type Storage interface {
-	UpdateGauge(name string, value float64)
-	UpdateCounter(name string, value int64)
+	Ping(ctx context.Context) error
 
-	GetGauge(name string) (float64, bool)
-	GetCounter(name string) (int64, bool)
+	UpdateGauge(ctx context.Context, name string, value float64)
+	UpdateCounter(ctx context.Context, name string, delta int64)
 
-	ListGauges() map[string]float64
-	ListCounters() map[string]int64
+	GetGauge(ctx context.Context, name string) (float64, bool)
+	GetCounter(ctx context.Context, name string) (int64, bool)
 
-	GetAllGauges() map[string]float64
-	GetAllCounters() map[string]int64
+	GetAllGauges(ctx context.Context) map[string]float64
+	GetAllCounters(ctx context.Context) map[string]int64
+
+	ListGauges(ctx context.Context) map[string]float64
+	ListCounters(ctx context.Context) map[string]int64
 }

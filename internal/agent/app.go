@@ -11,7 +11,7 @@ import (
 )
 
 type App struct {
-	client         *sender.Client // оставлен для совместимости
+	client         *sender.Client
 	serverURL      string
 	pollInterval   time.Duration
 	reportInterval time.Duration
@@ -46,28 +46,43 @@ func (a *App) Run() {
 			a.counters.Store(collector.Custom())
 
 		case <-reportTicker.C:
+			var batch []model.Metrics
+
 			if g, ok := a.gauges.Load().(model.RuntimeMetrics); ok {
 				for k, v := range g {
 					val := v
-					if err := sendJSON(a.serverURL, model.Metrics{
+					batch = append(batch, model.Metrics{
 						ID:    k,
 						MType: model.MetricGauge,
 						Value: &val,
-					}); err != nil {
-						log.Printf("failed to send gauge %s: %v", k, err)
-					}
+					})
 				}
 			}
 
 			if c, ok := a.counters.Load().(model.CustomMetrics); ok {
 				for k, v := range c {
 					delta := v
-					if err := sendJSON(a.serverURL, model.Metrics{
+					batch = append(batch, model.Metrics{
 						ID:    k,
 						MType: model.MetricCounter,
 						Delta: &delta,
-					}); err != nil {
-						log.Printf("failed to send counter %s: %v", k, err)
+					})
+				}
+			}
+
+			if len(batch) == 0 {
+				continue
+			}
+
+			if err := a.client.Batch(batch); err != nil {
+				log.Printf("batch send failed, fallback to single: %v", err)
+
+				for _, m := range batch {
+					switch m.MType {
+					case model.MetricGauge:
+						_ = a.client.Gauge(m.ID, *m.Value)
+					case model.MetricCounter:
+						_ = a.client.Counter(m.ID, *m.Delta)
 					}
 				}
 			}

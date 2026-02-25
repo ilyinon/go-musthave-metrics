@@ -26,3 +26,4 @@ vendor/
 
 /agent
 /server
+metrics-db.json

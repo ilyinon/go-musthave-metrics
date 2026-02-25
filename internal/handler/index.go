@@ -1,10 +1,12 @@
 package handler
 
 import (
+	"context"
 	"html"
 	"net/http"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
 )
@@ -17,14 +19,32 @@ func NewIndex(storage repository.Storage) *IndexHandler {
 	return &IndexHandler{storage: storage}
 }
 
-func (h *IndexHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+// Ping checks database connection.
+// GET /ping
+func (h *IndexHandler) Ping(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+
+	if err := h.storage.Ping(ctx); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// ServeHTTP renders HTML page with metrics.
+// GET /
+func (h *IndexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 
 	w.Write([]byte("<html><head><title>Metrics</title></head><body>"))
 	w.Write([]byte("<h1>Current Metrics</h1><ul>"))
 
-	gauges := h.storage.ListGauges()
+	gauges := h.storage.ListGauges(ctx)
 	gKeys := make([]string, 0, len(gauges))
 	for k := range gauges {
 		gKeys = append(gKeys, k)
@@ -42,7 +62,7 @@ func (h *IndexHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 		))
 	}
 
-	counters := h.storage.ListCounters()
+	counters := h.storage.ListCounters(ctx)
 	cKeys := make([]string, 0, len(counters))
 	for k := range counters {
 		cKeys = append(cKeys, k)

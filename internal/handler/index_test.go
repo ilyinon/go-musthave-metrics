@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,9 +12,11 @@ import (
 )
 
 func TestIndexHandler(t *testing.T) {
+	ctx := context.Background()
+
 	store := mem.New()
-	store.UpdateGauge("g1", 0.5)
-	store.UpdateCounter("c1", 7)
+	store.UpdateGauge(ctx, "g1", 0.5)
+	store.UpdateCounter(ctx, "c1", 7)
 
 	h := NewIndex(store)
 	server := httptest.NewServer(h)

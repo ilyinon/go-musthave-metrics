@@ -1,6 +1,7 @@
 package mem
 
 import (
+	"context"
 	"sync"
 
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
@@ -19,21 +20,25 @@ func New() repository.Storage {
 	}
 }
 
-func (s *Storage) UpdateGauge(name string, value float64) {
+func (s *Storage) Ping(ctx context.Context) error {
+	return nil
+}
+
+func (s *Storage) UpdateGauge(ctx context.Context, name string, value float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.gauges[name] = value
 }
 
-func (s *Storage) UpdateCounter(name string, value int64) {
+func (s *Storage) UpdateCounter(ctx context.Context, name string, value int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.counters[name] += value
 }
 
-func (s *Storage) GetGauge(name string) (float64, bool) {
+func (s *Storage) GetGauge(ctx context.Context, name string) (float64, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -41,7 +46,7 @@ func (s *Storage) GetGauge(name string) (float64, bool) {
 	return v, ok
 }
 
-func (s *Storage) GetCounter(name string) (int64, bool) {
+func (s *Storage) GetCounter(ctx context.Context, name string) (int64, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -49,7 +54,7 @@ func (s *Storage) GetCounter(name string) (int64, bool) {
 	return v, ok
 }
 
-func (s *Storage) ListGauges() map[string]float64 {
+func (s *Storage) ListGauges(ctx context.Context) map[string]float64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -60,7 +65,7 @@ func (s *Storage) ListGauges() map[string]float64 {
 	return c
 }
 
-func (s *Storage) ListCounters() map[string]int64 {
+func (s *Storage) ListCounters(ctx context.Context) map[string]int64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -71,7 +76,7 @@ func (s *Storage) ListCounters() map[string]int64 {
 	return c
 }
 
-func (s *Storage) GetAllGauges() map[string]float64 {
+func (s *Storage) GetAllGauges(ctx context.Context) map[string]float64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -82,7 +87,7 @@ func (s *Storage) GetAllGauges() map[string]float64 {
 	return res
 }
 
-func (s *Storage) GetAllCounters() map[string]int64 {
+func (s *Storage) GetAllCounters(ctx context.Context) map[string]int64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
