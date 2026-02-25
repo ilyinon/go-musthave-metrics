@@ -19,6 +19,8 @@ func NewUpdate(storage repository.Storage) *UpdateHandler {
 }
 
 func (h *UpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	metricType := chi.URLParam(r, "type")
 	name := chi.URLParam(r, "name")
 	valueStr := chi.URLParam(r, "value")
@@ -30,7 +32,7 @@ func (h *UpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "bad value", http.StatusBadRequest)
 			return
 		}
-		h.storage.UpdateGauge(name, v)
+		h.storage.UpdateGauge(ctx, name, v)
 
 	case model.MetricCounter:
 		v, err := strconv.ParseInt(valueStr, 10, 64)
@@ -38,7 +40,7 @@ func (h *UpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "bad value", http.StatusBadRequest)
 			return
 		}
-		h.storage.UpdateCounter(name, v)
+		h.storage.UpdateCounter(ctx, name, v)
 
 	default:
 		http.Error(w, "bad metric type", http.StatusBadRequest)

@@ -5,6 +5,7 @@ go 1.24.0
 toolchain go1.24.11
 
 require (
+	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-resty/resty/v2 v2.17.1
 	github.com/golang-migrate/migrate/v4 v4.19.1

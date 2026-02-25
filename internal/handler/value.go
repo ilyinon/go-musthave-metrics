@@ -19,12 +19,14 @@ func NewValue(storage repository.Storage) *ValueHandler {
 }
 
 func (h *ValueHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	metricType := chi.URLParam(r, "type")
 	name := chi.URLParam(r, "name")
 
 	switch metricType {
 	case model.MetricGauge:
-		v, ok := h.storage.GetGauge(name)
+		v, ok := h.storage.GetGauge(ctx, name)
 		if !ok {
 			http.NotFound(w, r)
 			return
@@ -32,7 +34,7 @@ func (h *ValueHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(strconv.FormatFloat(v, 'f', -1, 64)))
 
 	case model.MetricCounter:
-		v, ok := h.storage.GetCounter(name)
+		v, ok := h.storage.GetCounter(ctx, name)
 		if !ok {
 			http.NotFound(w, r)
 			return

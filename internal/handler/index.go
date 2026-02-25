@@ -35,14 +35,16 @@ func (h *IndexHandler) Ping(w http.ResponseWriter, r *http.Request) {
 
 // ServeHTTP renders HTML page with metrics.
 // GET /
-func (h *IndexHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+func (h *IndexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 
 	w.Write([]byte("<html><head><title>Metrics</title></head><body>"))
 	w.Write([]byte("<h1>Current Metrics</h1><ul>"))
 
-	gauges := h.storage.ListGauges()
+	gauges := h.storage.ListGauges(ctx)
 	gKeys := make([]string, 0, len(gauges))
 	for k := range gauges {
 		gKeys = append(gKeys, k)
@@ -60,7 +62,7 @@ func (h *IndexHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 		))
 	}
 
-	counters := h.storage.ListCounters()
+	counters := h.storage.ListCounters(ctx)
 	cKeys := make([]string, 0, len(counters))
 	for k := range counters {
 		cKeys = append(cKeys, k)

@@ -17,10 +17,11 @@ func NewUpdates(storage repository.Storage) *UpdatesHandler {
 }
 
 func (h *UpdatesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var metrics []model.Metrics
+	ctx := r.Context()
 
+	var metrics []model.Metrics
 	if err := json.NewDecoder(r.Body).Decode(&metrics); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 
@@ -28,17 +29,17 @@ func (h *UpdatesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		switch m.MType {
 		case model.MetricGauge:
 			if m.Value == nil {
-				http.Error(w, "bad request", http.StatusBadRequest)
+				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 				return
 			}
-			h.storage.UpdateGauge(m.ID, *m.Value)
+			h.storage.UpdateGauge(ctx, m.ID, *m.Value)
 
 		case model.MetricCounter:
 			if m.Delta == nil {
-				http.Error(w, "bad request", http.StatusBadRequest)
+				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 				return
 			}
-			h.storage.UpdateCounter(m.ID, *m.Delta)
+			h.storage.UpdateCounter(ctx, m.ID, *m.Delta)
 
 		default:
 			http.Error(w, "unknown metric type", http.StatusBadRequest)
