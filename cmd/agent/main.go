@@ -19,6 +19,7 @@ func main() {
 	}
 	poll := config.SecondsDuration(2 * time.Second)
 	report := config.SecondsDuration(10 * time.Second)
+	var key string
 
 	// ===== env overrides =====
 	if v, ok := os.LookupEnv("ADDRESS"); ok {
@@ -41,9 +42,14 @@ func main() {
 	flag.Var(addr, "a", "server address host:port")
 	flag.Var(&poll, "p", "poll interval")
 	flag.Var(&report, "r", "report interval")
+	flag.StringVar(&key, "k", "", "signing key")
 	flag.Parse()
 
-	client := sender.New(addr.String())
+	if key == "" {
+		key = os.Getenv("KEY")
+	}
+
+	client := sender.New(addr.String(), key)
 	app := agent.New(client, addr.String(), time.Duration(poll), time.Duration(report))
 
 	log.Printf(
