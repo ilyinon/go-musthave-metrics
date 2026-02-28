@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewClient(t *testing.T) {
-	c := New("http://localhost:8000")
+	c := New("http://localhost:8000", "")
 
 	if c.baseURL != "http://localhost:8000" {
 		t.Errorf("baseURL mismatch: got %s", c.baseURL)
@@ -27,7 +27,7 @@ func TestSendGaugeAndCounter(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL)
+	client := New(server.URL, "")
 
 	client.Gauge("TestGauge", 12.34)
 	client.Counter("TestCounter", 5)
