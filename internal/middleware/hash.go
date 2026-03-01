@@ -18,25 +18,26 @@ func HashVerifier(key string) func(http.Handler) http.Handler {
 
 			received := r.Header.Get("HashSHA256")
 			if received == "" {
-				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+				next.ServeHTTP(w, r)
 				return
 			}
 
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
 				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 				return
 			}
-			r.Body.Close()
+			_ = r.Body.Close()
 
 			expected := crypto.HashSHA256(body, key)
 			if !hmacEqual(received, expected) {
+				w.Header().Set("Content-Type", "application/json")
 				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 				return
 			}
 
 			r.Body = io.NopCloser(bytes.NewReader(body))
-
 			next.ServeHTTP(w, r)
 		})
 	}
