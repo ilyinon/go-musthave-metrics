@@ -2,16 +2,12 @@ package agent
 
 import (
 	"log"
-	"strconv"
 	"sync/atomic"
 	"time"
 
 	"github.com/ilyinon/go-musthave-metrics/internal/agent/collector"
 	"github.com/ilyinon/go-musthave-metrics/internal/agent/sender"
 	"github.com/ilyinon/go-musthave-metrics/internal/model"
-
-	"github.com/shirou/gopsutil/v3/cpu"
-	"github.com/shirou/gopsutil/v3/mem"
 )
 
 type App struct {
@@ -74,23 +70,15 @@ func (a *App) Run() {
 	for {
 		select {
 		case <-pollTicker.C:
-			a.gauges.Store(collector.Runtime())
+			g := collector.Runtime()
+
+			for k, v := range collector.Gopsutil() {
+				g[k] = v
+			}
+
+			a.gauges.Store(g)
+
 			a.counters.Store(collector.Custom())
-
-			if vm, err := mem.VirtualMemory(); err == nil {
-				g := a.gauges.Load().(model.RuntimeMetrics)
-				g["TotalMemory"] = float64(vm.Total)
-				g["FreeMemory"] = float64(vm.Free)
-				a.gauges.Store(g)
-			}
-
-			if cpuPercents, err := cpu.Percent(0, true); err == nil {
-				g := a.gauges.Load().(model.RuntimeMetrics)
-				for i, v := range cpuPercents {
-					g[formatCPU(i)] = v
-				}
-				a.gauges.Store(g)
-			}
 
 		case <-reportTicker.C:
 			var batch []model.Metrics
@@ -124,8 +112,4 @@ func (a *App) Run() {
 			sendCh <- batch
 		}
 	}
-}
-
-func formatCPU(i int) string {
-	return "CPUutilization" + strconv.Itoa(i+1)
 }
