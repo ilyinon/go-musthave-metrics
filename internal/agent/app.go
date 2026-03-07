@@ -2,13 +2,15 @@ package agent
 
 import (
 	"log"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/ilyinon/go-musthave-metrics/internal/agent/collector"
 	"github.com/ilyinon/go-musthave-metrics/internal/agent/sender"
 	"github.com/ilyinon/go-musthave-metrics/internal/model"
 )
+
+const defaultRateLimit = 1
 
 type App struct {
 	client         *sender.Client
@@ -17,8 +19,9 @@ type App struct {
 	reportInterval time.Duration
 	rateLimit      int
 
-	gauges   atomic.Value
-	counters atomic.Value
+	mu       sync.RWMutex
+	gauges   model.RuntimeMetrics
+	counters model.CustomMetrics
 }
 
 func New(
@@ -28,7 +31,7 @@ func New(
 	rateLimit int,
 ) *App {
 	if rateLimit <= 0 {
-		rateLimit = 1
+		rateLimit = defaultRateLimit
 	}
 
 	return &App{
@@ -52,14 +55,14 @@ func (a *App) Run() {
 		go func() {
 			for batch := range sendCh {
 				if err := a.client.Batch(batch); err != nil {
-					log.Printf("batch send failed, fallback to single: %v", err)
+					log.Printf("ERROR: batch send failed, fallback to single: %v", err)
 
 					for _, m := range batch {
 						switch m.MType {
 						case model.MetricGauge:
-							_ = a.client.Gauge(m.ID, *m.Value)
+							a.client.Gauge(m.ID, *m.Value)
 						case model.MetricCounter:
-							_ = a.client.Counter(m.ID, *m.Delta)
+							a.client.Counter(m.ID, *m.Delta)
 						}
 					}
 				}
@@ -76,33 +79,37 @@ func (a *App) Run() {
 				g[k] = v
 			}
 
-			a.gauges.Store(g)
+			c := collector.Custom()
 
-			a.counters.Store(collector.Custom())
+			a.mu.Lock()
+			a.gauges = g
+			a.counters = c
+			a.mu.Unlock()
 
 		case <-reportTicker.C:
 			var batch []model.Metrics
 
-			if g, ok := a.gauges.Load().(model.RuntimeMetrics); ok {
-				for k, v := range g {
-					val := v
-					batch = append(batch, model.Metrics{
-						ID:    k,
-						MType: model.MetricGauge,
-						Value: &val,
-					})
-				}
+			a.mu.RLock()
+			g := a.gauges
+			c := a.counters
+			a.mu.RUnlock()
+
+			for k, v := range g {
+				val := v
+				batch = append(batch, model.Metrics{
+					ID:    k,
+					MType: model.MetricGauge,
+					Value: &val,
+				})
 			}
 
-			if c, ok := a.counters.Load().(model.CustomMetrics); ok {
-				for k, v := range c {
-					delta := v
-					batch = append(batch, model.Metrics{
-						ID:    k,
-						MType: model.MetricCounter,
-						Delta: &delta,
-					})
-				}
+			for k, v := range c {
+				delta := v
+				batch = append(batch, model.Metrics{
+					ID:    k,
+					MType: model.MetricCounter,
+					Delta: &delta,
+				})
 			}
 
 			if len(batch) == 0 {
