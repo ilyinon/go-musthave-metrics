@@ -3,22 +3,28 @@ package router
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+	chimw "github.com/go-chi/chi/v5/middleware"
+
 	"github.com/ilyinon/go-musthave-metrics/internal/audit"
 	"github.com/ilyinon/go-musthave-metrics/internal/handler"
 	appmw "github.com/ilyinon/go-musthave-metrics/internal/middleware"
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
-
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 )
 
-func New(storage repository.Storage, auditor *audit.Auditor) http.Handler {
+func New(storage repository.Storage, key string, auditor *audit.Auditor) http.Handler {
 	r := chi.NewRouter()
 
-	r.Use(middleware.RealIP)
-	r.Use(appmw.Gzip)
+	r.Use(chimw.RealIP)
 	r.Use(appmw.Logger)
-	r.Use(middleware.Recoverer)
+	r.Use(chimw.Recoverer)
+
+	// проверка входящего тела
+	r.Use(appmw.HashVerifier(key))
+
+	// обработка ответа
+	r.Use(appmw.Gzip)
+	r.Use(appmw.HashSigner(key))
 
 	indexHandler := handler.NewIndex(storage)
 

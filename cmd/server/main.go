@@ -29,6 +29,7 @@ func main() {
 	storeFile := "./metrics-db.json"
 	restore := true
 	dsn := ""
+	var key string
 
 	var auditFile string
 	var auditURL string
@@ -66,12 +67,17 @@ func main() {
 	flag.DurationVar(&storeInterval, "i", storeInterval, "store interval")
 	flag.StringVar(&storeFile, "f", storeFile, "storage file")
 	flag.BoolVar(&restore, "r", restore, "restore metrics")
+	flag.StringVar(&key, "k", "", "signing key")
 	flag.StringVar(&auditFile, "audit-file", auditFile, "audit file path")
 	flag.StringVar(&auditURL, "audit-url", auditURL, "audit url")
 	flag.Parse()
 
 	if dsn == "" {
 		dsn = os.Getenv("DATABASE_DSN")
+	}
+
+	if key == "" {
+		key = os.Getenv("KEY")
 	}
 
 	var auditor *audit.Auditor
@@ -154,7 +160,7 @@ func main() {
 		log.Println("using memory storage")
 	}
 
-	handler := router.New(storage, auditor)
+	handler := router.New(storage, key, auditor)
 
 	log.Printf("starting server on %s", addr.String())
 	log.Fatal(http.ListenAndServe(addr.String(), handler))
