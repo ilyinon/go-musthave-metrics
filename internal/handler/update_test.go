@@ -11,7 +11,7 @@ import (
 
 func TestUpdateHandler_BadMetricType(t *testing.T) {
 	store := mem.New()
-	h := NewUpdate(store)
+	h := NewUpdate(store, nil)
 
 	r := chi.NewRouter()
 	r.Post("/update/{type}/{name}/{value}", h.ServeHTTP)
@@ -28,7 +28,7 @@ func TestUpdateHandler_BadMetricType(t *testing.T) {
 
 func TestUpdateHandler_BadMetricValue(t *testing.T) {
 	store := mem.New()
-	h := NewUpdate(store)
+	h := NewUpdate(store, nil)
 
 	r := chi.NewRouter()
 	r.Post("/update/{type}/{name}/{value}", h.ServeHTTP)

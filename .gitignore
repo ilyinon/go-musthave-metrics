@@ -27,3 +27,5 @@ vendor/
 /agent
 /server
 metrics-db.json
+audit.log
+/bin

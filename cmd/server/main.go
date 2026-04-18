@@ -15,6 +15,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"github.com/ilyinon/go-musthave-metrics/internal/audit"
 	"github.com/ilyinon/go-musthave-metrics/internal/config"
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
 	filestorage "github.com/ilyinon/go-musthave-metrics/internal/repository/file"
@@ -28,6 +29,9 @@ func main() {
 	storeFile := "./metrics-db.json"
 	restore := true
 	dsn := ""
+
+	var auditFile string
+	var auditURL string
 
 	addr := &config.ServerAddress{
 		Host: "localhost",
@@ -50,16 +54,40 @@ func main() {
 			restore = b
 		}
 	}
+	if v, ok := os.LookupEnv("AUDIT_FILE"); ok {
+		auditFile = v
+	}
+	if v, ok := os.LookupEnv("AUDIT_URL"); ok {
+		auditURL = v
+	}
 
 	flag.Var(addr, "a", "server address")
 	flag.StringVar(&dsn, "d", "", "database dsn")
 	flag.DurationVar(&storeInterval, "i", storeInterval, "store interval")
 	flag.StringVar(&storeFile, "f", storeFile, "storage file")
 	flag.BoolVar(&restore, "r", restore, "restore metrics")
+	flag.StringVar(&auditFile, "audit-file", auditFile, "audit file path")
+	flag.StringVar(&auditURL, "audit-url", auditURL, "audit url")
 	flag.Parse()
 
 	if dsn == "" {
 		dsn = os.Getenv("DATABASE_DSN")
+	}
+
+	var auditor *audit.Auditor
+
+	var sinks []audit.Sink
+
+	if auditFile != "" {
+		sinks = append(sinks, audit.NewFileSink(auditFile))
+	}
+
+	if auditURL != "" {
+		sinks = append(sinks, audit.NewHTTPSink(auditURL))
+	}
+
+	if len(sinks) > 0 {
+		auditor = audit.New(sinks...)
 	}
 
 	var storage repository.Storage
@@ -126,7 +154,7 @@ func main() {
 		log.Println("using memory storage")
 	}
 
-	handler := router.New(storage)
+	handler := router.New(storage, auditor)
 
 	log.Printf("starting server on %s", addr.String())
 	log.Fatal(http.ListenAndServe(addr.String(), handler))

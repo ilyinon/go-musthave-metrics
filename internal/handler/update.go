@@ -3,7 +3,9 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"time"
 
+	"github.com/ilyinon/go-musthave-metrics/internal/audit"
 	"github.com/ilyinon/go-musthave-metrics/internal/model"
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
 
@@ -12,10 +14,11 @@ import (
 
 type UpdateHandler struct {
 	storage repository.Storage
+	auditor *audit.Auditor
 }
 
-func NewUpdate(storage repository.Storage) *UpdateHandler {
-	return &UpdateHandler{storage: storage}
+func NewUpdate(storage repository.Storage, auditor *audit.Auditor) *UpdateHandler {
+	return &UpdateHandler{storage: storage, auditor: auditor}
 }
 
 func (h *UpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -45,6 +48,14 @@ func (h *UpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "bad metric type", http.StatusBadRequest)
 		return
+	}
+
+	if h.auditor != nil {
+		h.auditor.Notify(audit.Event{
+			TS:        time.Now().Unix(),
+			Metrics:   []string{name},
+			IPAddress: extractIP(r),
+		})
 	}
 
 	w.WriteHeader(http.StatusOK)

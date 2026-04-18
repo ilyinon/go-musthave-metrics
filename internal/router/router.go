@@ -3,6 +3,7 @@ package router
 import (
 	"net/http"
 
+	"github.com/ilyinon/go-musthave-metrics/internal/audit"
 	"github.com/ilyinon/go-musthave-metrics/internal/handler"
 	appmw "github.com/ilyinon/go-musthave-metrics/internal/middleware"
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
@@ -11,7 +12,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-func New(storage repository.Storage) http.Handler {
+func New(storage repository.Storage, auditor *audit.Auditor) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RealIP)
@@ -24,15 +25,15 @@ func New(storage repository.Storage) http.Handler {
 	r.Get("/", indexHandler.ServeHTTP)
 	r.Get("/ping", indexHandler.Ping)
 
-	r.Post("/update/{type}/{name}/{value}", handler.NewUpdate(storage).ServeHTTP)
-	r.Post("/update", handler.NewUpdateJSON(storage).ServeHTTP)
-	r.Post("/update/", handler.NewUpdateJSON(storage).ServeHTTP)
+	r.Post("/update/{type}/{name}/{value}", handler.NewUpdate(storage, auditor).ServeHTTP)
+	r.Post("/update", handler.NewUpdateJSON(storage, auditor).ServeHTTP)
+	r.Post("/update/", handler.NewUpdateJSON(storage, auditor).ServeHTTP)
 
 	r.Post("/value", handler.NewValueJSON(storage).ServeHTTP)
 	r.Post("/value/", handler.NewValueJSON(storage).ServeHTTP)
 	r.Get("/value/{type}/{name}", handler.NewValue(storage).ServeHTTP)
 
-	r.Post("/updates/", handler.NewUpdates(storage).ServeHTTP)
+	r.Post("/updates/", handler.NewUpdates(storage, auditor).ServeHTTP)
 
 	return r
 }
