@@ -11,7 +11,7 @@ import (
 
 func TestRouter_FullFlow(t *testing.T) {
 	store := mem.New()
-	r := New(store)
+	r := New(store, "")
 
 	server := httptest.NewServer(r)
 	defer server.Close()
@@ -42,7 +42,7 @@ func TestRouter_FullFlow(t *testing.T) {
 
 func TestRouter_MethodNotAllowed(t *testing.T) {
 	store := mem.New()
-	r := New(store)
+	r := New(store, "")
 
 	server := httptest.NewServer(r)
 	defer server.Close()

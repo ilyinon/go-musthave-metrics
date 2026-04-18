@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/ilyinon/go-musthave-metrics/internal/crypto"
 	"github.com/ilyinon/go-musthave-metrics/internal/model"
 )
 
@@ -25,11 +26,13 @@ var retryDelays = []time.Duration{
 type Client struct {
 	baseURL string
 	client  *resty.Client
+	key     string
 }
 
-func New(baseURL string) *Client {
+func New(baseURL string, key string) *Client {
 	return &Client{
 		baseURL: baseURL,
+		key:     key,
 		client: resty.New().
 			SetTimeout(3 * time.Second),
 	}
@@ -118,11 +121,17 @@ func (c *Client) batchOnce(metrics []model.Metrics) error {
 	}
 	_ = gz.Close()
 
-	resp, err := c.client.R().
+	req := c.client.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Content-Encoding", "gzip").
-		SetBody(&buf).
-		Post(c.baseURL + "/updates/")
+		SetBody(&buf)
+
+	if c.key != "" {
+		hash := crypto.HashSHA256(buf.Bytes(), c.key)
+		req.SetHeader("HashSHA256", hash)
+	}
+
+	resp, err := req.Post(c.baseURL + "/updates/")
 
 	if err != nil {
 		return err

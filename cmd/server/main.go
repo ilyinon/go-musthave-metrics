@@ -28,6 +28,7 @@ func main() {
 	storeFile := "./metrics-db.json"
 	restore := true
 	dsn := ""
+	var key string
 
 	addr := &config.ServerAddress{
 		Host: "localhost",
@@ -56,10 +57,15 @@ func main() {
 	flag.DurationVar(&storeInterval, "i", storeInterval, "store interval")
 	flag.StringVar(&storeFile, "f", storeFile, "storage file")
 	flag.BoolVar(&restore, "r", restore, "restore metrics")
+	flag.StringVar(&key, "k", "", "signing key")
 	flag.Parse()
 
 	if dsn == "" {
 		dsn = os.Getenv("DATABASE_DSN")
+	}
+
+	if key == "" {
+		key = os.Getenv("KEY")
 	}
 
 	var storage repository.Storage
@@ -126,7 +132,7 @@ func main() {
 		log.Println("using memory storage")
 	}
 
-	handler := router.New(storage)
+	handler := router.New(storage, key)
 
 	log.Printf("starting server on %s", addr.String())
 	log.Fatal(http.ListenAndServe(addr.String(), handler))
