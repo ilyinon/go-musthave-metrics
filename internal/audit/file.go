@@ -7,12 +7,16 @@ import (
 )
 
 type FileSink struct {
-	path string
+	file *os.File
 	mu   sync.Mutex
 }
 
 func NewFileSink(path string) *FileSink {
-	return &FileSink{path: path}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+	return &FileSink{file: f}
 }
 
 func (f *FileSink) Send(e Event) error {
@@ -24,12 +28,6 @@ func (f *FileSink) Send(e Event) error {
 		return err
 	}
 
-	file, err := os.OpenFile(f.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	_, err = file.Write(append(b, '\n'))
+	_, err = f.file.Write(append(b, '\n'))
 	return err
 }

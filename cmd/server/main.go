@@ -15,6 +15,8 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	_ "net/http/pprof"
+
 	"github.com/ilyinon/go-musthave-metrics/internal/audit"
 	"github.com/ilyinon/go-musthave-metrics/internal/config"
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
@@ -33,6 +35,10 @@ func main() {
 
 	var auditFile string
 	var auditURL string
+
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	addr := &config.ServerAddress{
 		Host: "localhost",

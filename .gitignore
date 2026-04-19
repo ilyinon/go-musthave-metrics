@@ -29,3 +29,4 @@ vendor/
 metrics-db.json
 audit.log
 /bin
+/profiles
