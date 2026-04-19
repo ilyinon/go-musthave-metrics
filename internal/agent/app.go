@@ -12,6 +12,8 @@ import (
 
 const defaultRateLimit = 1
 
+// App represents the metrics agent responsible for collecting
+// and sending metrics to the server.
 type App struct {
 	client         *sender.Client
 	serverURL      string
@@ -24,6 +26,7 @@ type App struct {
 	counters model.CustomMetrics
 }
 
+// New creates a new App with the given configuration.
 func New(
 	client *sender.Client,
 	serverURL string,
@@ -43,12 +46,14 @@ func New(
 	}
 }
 
+// Run starts metric collection and reporting loops.
 func (a *App) Run() {
 	pollTicker := time.NewTicker(a.pollInterval)
 	reportTicker := time.NewTicker(a.reportInterval)
 	defer pollTicker.Stop()
 	defer reportTicker.Stop()
 
+	// worker pool for sending metrics batches concurrently
 	sendCh := make(chan []model.Metrics, a.rateLimit)
 
 	for i := 0; i < a.rateLimit; i++ {

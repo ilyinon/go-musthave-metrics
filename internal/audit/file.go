@@ -6,11 +6,13 @@ import (
 	"sync"
 )
 
+// FileSink writes audit events to a file.
 type FileSink struct {
 	file *os.File
 	mu   sync.Mutex
 }
 
+// NewFileSink creates a new FileSink.
 func NewFileSink(path string) *FileSink {
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {

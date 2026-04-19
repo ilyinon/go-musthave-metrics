@@ -2,6 +2,7 @@ package repository
 
 import "context"
 
+// Storage defines a unified interface for metric storage backends.
 type Storage interface {
 	Ping(ctx context.Context) error
 

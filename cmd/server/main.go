@@ -26,6 +26,8 @@ import (
 	"github.com/ilyinon/go-musthave-metrics/internal/router"
 )
 
+// main configures application components, initializes storage,
+// sets up audit sinks and starts the HTTP server.
 func main() {
 	storeInterval := 300 * time.Second
 	storeFile := "./metrics-db.json"
@@ -37,7 +39,9 @@ func main() {
 	var auditURL string
 
 	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
+		if err := http.ListenAndServe("localhost:6060", nil); err != nil {
+			log.Println("pprof server error:", err)
+		}
 	}()
 
 	addr := &config.ServerAddress{
@@ -45,6 +49,7 @@ func main() {
 		Port: 8080,
 	}
 
+	// read configuration from environment variables
 	if v, ok := os.LookupEnv("ADDRESS"); ok {
 		addr.Set(v)
 	}
@@ -68,6 +73,7 @@ func main() {
 		auditURL = v
 	}
 
+	// parse command-line flags
 	flag.Var(addr, "a", "server address")
 	flag.StringVar(&dsn, "d", "", "database dsn")
 	flag.DurationVar(&storeInterval, "i", storeInterval, "store interval")
@@ -86,8 +92,8 @@ func main() {
 		key = os.Getenv("KEY")
 	}
 
+	// initialize audit sinks
 	var auditor *audit.Auditor
-
 	var sinks []audit.Sink
 
 	if auditFile != "" {
@@ -102,6 +108,7 @@ func main() {
 		auditor = audit.New(sinks...)
 	}
 
+	// initialize storage backend
 	var storage repository.Storage
 
 	if dsn != "" {
@@ -147,15 +154,19 @@ func main() {
 		fs := filestorage.New(memStorage, storeFile)
 
 		if restore {
-			_ = fs.Restore()
+			if err := fs.Restore(); err != nil {
+				log.Println("restore error:", err)
+			}
 		}
-
+		// start pprof server
 		if storeInterval > 0 {
 			go func() {
 				t := time.NewTicker(storeInterval)
 				defer t.Stop()
 				for range t.C {
-					_ = fs.Save()
+					if err := fs.Save(); err != nil {
+						log.Println("save error:", err)
+					}
 				}
 			}()
 		}
@@ -166,6 +177,7 @@ func main() {
 		log.Println("using memory storage")
 	}
 
+	// start HTTP server
 	handler := router.New(storage, key, auditor)
 
 	log.Printf("starting server on %s", addr.String())

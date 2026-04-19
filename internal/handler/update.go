@@ -12,15 +12,18 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// UpdateHandler handles HTTP requests for updating metrics via URL parameters.
 type UpdateHandler struct {
 	storage repository.Storage
 	auditor *audit.Auditor
 }
 
+// NewUpdate creates a new UpdateHandler.
 func NewUpdate(storage repository.Storage, auditor *audit.Auditor) *UpdateHandler {
 	return &UpdateHandler{storage: storage, auditor: auditor}
 }
 
+// ServeHTTP processes metric updates received via URL.
 func (h *UpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 

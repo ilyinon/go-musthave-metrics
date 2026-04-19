@@ -23,6 +23,8 @@ var gzipPool = sync.Pool{
 	},
 }
 
+// Gzip is a middleware that compresses HTTP responses using gzip
+// and decompresses incoming gzip requests.
 func Gzip(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 

@@ -27,6 +27,7 @@ func (w *responseWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
+// Logger logs incoming HTTP requests.
 func Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

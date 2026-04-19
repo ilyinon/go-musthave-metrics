@@ -11,15 +11,18 @@ import (
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
 )
 
+// UpdateJSONHandler handles HTTP requests for updating metrics in JSON format.
 type UpdateJSONHandler struct {
 	storage repository.Storage
 	auditor *audit.Auditor
 }
 
+// NewUpdateJSON creates a new UpdateJSONHandler.
 func NewUpdateJSON(storage repository.Storage, auditor *audit.Auditor) *UpdateJSONHandler {
 	return &UpdateJSONHandler{storage: storage, auditor: auditor}
 }
 
+// ServeHTTP processes a JSON request with metric data and updates storage.
 func (h *UpdateJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
 		http.Error(w, "invalid content type", http.StatusBadRequest)

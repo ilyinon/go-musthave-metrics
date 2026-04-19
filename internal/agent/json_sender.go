@@ -14,6 +14,7 @@ var httpClient = &http.Client{
 	Timeout: 3 * time.Second,
 }
 
+// sendJSON sends a single metric to the server in JSON format using gzip compression.
 func sendJSON(serverURL string, m model.Metrics) error {
 	raw, err := json.Marshal(m)
 	if err != nil {
@@ -23,7 +24,9 @@ func sendJSON(serverURL string, m model.Metrics) error {
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	_, err = gz.Write(raw)
-	gz.Close()
+	if err := gz.Close(); err != nil {
+		return err
+	}
 	if err != nil {
 		return err
 	}

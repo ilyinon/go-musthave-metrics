@@ -8,11 +8,13 @@ import (
 	"time"
 )
 
+// HTTPSink sends audit events to a remote HTTP endpoint.ы
 type HTTPSink struct {
 	url    string
 	client *http.Client
 }
 
+// NewHTTPSink creates a new HTTPSink.
 func NewHTTPSink(url string) *HTTPSink {
 	return &HTTPSink{
 		url: url,

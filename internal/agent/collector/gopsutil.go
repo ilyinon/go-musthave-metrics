@@ -8,6 +8,8 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 )
 
+// Gopsutil collects system metrics using gopsutil library.
+// It returns memory statistics and per-CPU utilization values.
 func Gopsutil() model.RuntimeMetrics {
 	g := model.RuntimeMetrics{}
 

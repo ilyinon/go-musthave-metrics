@@ -12,6 +12,7 @@ import (
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
 )
 
+// New initializes and returns an HTTP router with all endpoints configured.
 func New(storage repository.Storage, key string, auditor *audit.Auditor) http.Handler {
 	r := chi.NewRouter()
 
@@ -19,10 +20,10 @@ func New(storage repository.Storage, key string, auditor *audit.Auditor) http.Ha
 	r.Use(appmw.Logger)
 	r.Use(chimw.Recoverer)
 
-	// проверка входящего тела
+	// request validation
 	r.Use(appmw.HashVerifier(key))
 
-	// обработка ответа
+	// response processing
 	r.Use(appmw.Gzip)
 	r.Use(appmw.HashSigner(key))
 

@@ -10,14 +10,17 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// ValueHandler handles requests for retrieving metric values via URL parameters.
 type ValueHandler struct {
 	storage repository.Storage
 }
 
+// NewValue creates a new ValueHandler.
 func NewValue(storage repository.Storage) *ValueHandler {
 	return &ValueHandler{storage: storage}
 }
 
+// ServeHTTP returns a metric value based on type and name from URL parameters.
 func (h *ValueHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 

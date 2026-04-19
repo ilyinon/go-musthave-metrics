@@ -11,15 +11,18 @@ import (
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
 )
 
+// UpdatesHandler handles batch updates of metrics.
 type UpdatesHandler struct {
 	storage repository.Storage
 	auditor *audit.Auditor
 }
 
+// NewUpdates creates a new UpdatesHandler.
 func NewUpdates(storage repository.Storage, auditor *audit.Auditor) *UpdatesHandler {
 	return &UpdatesHandler{storage: storage, auditor: auditor}
 }
 
+// ServeHTTP processes a batch of metrics sent in JSON format.
 func (h *UpdatesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 

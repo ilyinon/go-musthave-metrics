@@ -10,12 +10,14 @@ import (
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
 )
 
+// Storage wraps an in-memory storage and adds file persistence.
 type Storage struct {
 	mem  repository.Storage
 	path string
 	mu   sync.Mutex
 }
 
+// New creates a new Storage with file persistence.
 func New(mem repository.Storage, path string) *Storage {
 	return &Storage{
 		mem:  mem,
@@ -27,10 +29,7 @@ func (s *Storage) Ping(ctx context.Context) error {
 	return s.mem.Ping(ctx)
 }
 
-/*
-	Proxy методы — просто прокидываем ctx
-*/
-
+// Proxy methods delegate calls to the underlying storage.
 func (s *Storage) UpdateGauge(ctx context.Context, name string, value float64) {
 	s.mem.UpdateGauge(ctx, name, value)
 }
@@ -67,7 +66,7 @@ func (s *Storage) GetAllCounters(ctx context.Context) map[string]int64 {
 	File persistence
 */
 
-// Save сохраняет все метрики в файл
+// Save writes all metrics to the configured file.
 func (s *Storage) Save() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -102,7 +101,7 @@ func (s *Storage) Save() error {
 	return os.WriteFile(s.path, b, 0644)
 }
 
-// Restore загружает метрики из файла при старте
+// Restore loads metrics from the configured file into memory.
 func (s *Storage) Restore() error {
 	b, err := os.ReadFile(s.path)
 	if err != nil {
