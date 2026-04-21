@@ -13,12 +13,12 @@ type FileSink struct {
 }
 
 // NewFileSink creates a new FileSink.
-func NewFileSink(path string) *FileSink {
+func NewFileSink(path string) (*FileSink, error) {
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return &FileSink{file: f}
+	return &FileSink{file: f}, nil
 }
 
 func (f *FileSink) Send(e Event) error {

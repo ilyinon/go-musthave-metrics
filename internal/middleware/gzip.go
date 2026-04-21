@@ -34,7 +34,8 @@ func Gzip(next http.Handler) http.Handler {
 				http.Error(w, "bad gzip body", http.StatusBadRequest)
 				return
 			}
-			defer gr.Close()
+
+			defer putGzipReader(gr)
 
 			r.Body = io.NopCloser(gr)
 			r.Header.Del("Content-Encoding")

@@ -97,7 +97,11 @@ func main() {
 	var sinks []audit.Sink
 
 	if auditFile != "" {
-		sinks = append(sinks, audit.NewFileSink(auditFile))
+		sink, err := audit.NewFileSink(auditFile)
+		if err != nil {
+			log.Fatalf("failed to init audit file sink: %v", err)
+		}
+		sinks = append(sinks, sink)
 	}
 
 	if auditURL != "" {
