@@ -87,7 +87,6 @@ func main() {
 	if dsn == "" {
 		dsn = os.Getenv("DATABASE_DSN")
 	}
-
 	if key == "" {
 		key = os.Getenv("KEY")
 	}
@@ -127,7 +126,8 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		if err := db.PingContext(ctx); err != nil {
+		err = db.PingContext(ctx)
+		if err != nil {
 			log.Fatal(err)
 		}
 
@@ -145,12 +145,14 @@ func main() {
 			log.Fatal(err)
 		}
 
-		if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		err = m.Up()
+		if err != nil && err != migrate.ErrNoChange {
 			log.Fatal(err)
 		}
 
 		storage = postgres.New(db)
 		log.Println("using postgres storage")
+
 	} else if storeFile != "" {
 		memStorage := mem.New()
 		storage = memStorage
@@ -162,7 +164,7 @@ func main() {
 				log.Println("restore error:", err)
 			}
 		}
-		// start pprof server
+
 		if storeInterval > 0 {
 			go func() {
 				t := time.NewTicker(storeInterval)
@@ -176,6 +178,7 @@ func main() {
 		}
 
 		log.Println("using file storage")
+
 	} else {
 		storage = mem.New()
 		log.Println("using memory storage")

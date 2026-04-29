@@ -7,12 +7,16 @@ DB_URI=postgres://user:pass@localhost:5432/metrics?sslmode=disable
 build:
 	go build -o bin/server ./cmd/server/main.go
 	go build -o bin/agent ./cmd/agent/main.go
+	go build -o bin/staticlint ./cmd/staticlint
 
 run_server:
 	go run ./cmd/server/main.go
 
 run_agent:
 	go run ./cmd/agent/main.go
+
+run_static:
+	./bin/staticlint ./... 
 
 test:
 	go test ./... -cover

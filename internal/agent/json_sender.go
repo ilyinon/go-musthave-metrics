@@ -23,10 +23,13 @@ func sendJSON(serverURL string, m model.Metrics) error {
 
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
+
 	_, err = gz.Write(raw)
-	if err := gz.Close(); err != nil {
+	if err != nil {
 		return err
 	}
+
+	err = gz.Close()
 	if err != nil {
 		return err
 	}
@@ -48,7 +51,7 @@ func sendJSON(serverURL string, m model.Metrics) error {
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 
 	return nil
 }
