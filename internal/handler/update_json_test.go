@@ -14,7 +14,7 @@ import (
 
 func TestUpdateJSONHandler_GaugeOK(t *testing.T) {
 	store := mem.New()
-	h := NewUpdateJSON(store)
+	h := NewUpdateJSON(store, nil)
 
 	val := 1.23
 	body, _ := json.Marshal(model.Metrics{
@@ -42,7 +42,7 @@ func TestUpdateJSONHandler_GaugeOK(t *testing.T) {
 
 func TestUpdateJSONHandler_CounterOK(t *testing.T) {
 	store := mem.New()
-	h := NewUpdateJSON(store)
+	h := NewUpdateJSON(store, nil)
 
 	delta := int64(5)
 	body, _ := json.Marshal(model.Metrics{
@@ -69,7 +69,7 @@ func TestUpdateJSONHandler_CounterOK(t *testing.T) {
 
 func TestUpdateJSONHandler_InvalidContentType(t *testing.T) {
 	store := mem.New()
-	h := NewUpdateJSON(store)
+	h := NewUpdateJSON(store, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/update/", bytes.NewReader([]byte(`{}`)))
 	req.Header.Set("Content-Type", "text/plain")
@@ -84,7 +84,7 @@ func TestUpdateJSONHandler_InvalidContentType(t *testing.T) {
 
 func TestUpdateJSONHandler_BadJSON(t *testing.T) {
 	store := mem.New()
-	h := NewUpdateJSON(store)
+	h := NewUpdateJSON(store, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/update/", bytes.NewReader([]byte(`{bad json`)))
 	req.Header.Set("Content-Type", "application/json")

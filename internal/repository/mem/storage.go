@@ -7,12 +7,15 @@ import (
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
 )
 
+// Storage is an in-memory implementation of repository.Storage.
+// It stores metrics in maps protected by a RWMutex.
 type Storage struct {
 	mu       sync.RWMutex
 	gauges   map[string]float64
 	counters map[string]int64
 }
 
+// New creates a new in-memory Storage.
 func New() repository.Storage {
 	return &Storage{
 		gauges:   make(map[string]float64),

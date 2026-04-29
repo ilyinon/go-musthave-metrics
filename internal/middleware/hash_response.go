@@ -17,6 +17,8 @@ func (w *hashResponseWriter) Write(b []byte) (int, error) {
 	return w.ResponseWriter.Write(b)
 }
 
+// HashSigner is a middleware that calculates HMAC-SHA256 hash
+// of the response body and adds it to the HashSHA256 header.
 func HashSigner(key string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

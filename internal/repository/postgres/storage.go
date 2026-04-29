@@ -18,14 +18,17 @@ var retryDelays = []time.Duration{
 	5 * time.Second,
 }
 
+// Storage is a PostgreSQL implementation of repository.Storage.
 type Storage struct {
 	db *sql.DB
 }
 
+// New creates a new PostgreSQL storage.
 func New(db *sql.DB) *Storage {
 	return &Storage{db: db}
 }
 
+// Ping checks database connectivity.
 func (s *Storage) Ping(ctx context.Context) error {
 	return s.db.PingContext(ctx)
 }

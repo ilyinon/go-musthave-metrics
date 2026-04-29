@@ -7,12 +7,14 @@ import (
 	"github.com/ilyinon/go-musthave-metrics/internal/model"
 )
 
+// Runtime collects Go runtime memory statistics using runtime.MemStats.
+// It returns a set of metrics describing memory usage, GC activity and system allocation.
 func Runtime() model.RuntimeMetrics {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 
 	return model.RuntimeMetrics{
-		// ===== Основные аллокации =====
+		// Allocation metrics
 
 		"Alloc":      float64(ms.Alloc),      // текущие байты, выделенные под heap-объекты
 		"TotalAlloc": float64(ms.TotalAlloc), // всего выделено байт за всё время
@@ -21,7 +23,7 @@ func Runtime() model.RuntimeMetrics {
 		"Mallocs":    float64(ms.Mallocs),    // количество malloc
 		"Frees":      float64(ms.Frees),      // количество free
 
-		// ===== Heap =====
+		// Heap metrics
 
 		"HeapAlloc":    float64(ms.HeapAlloc),    // байты, выделенные под heap
 		"HeapSys":      float64(ms.HeapSys),      // байты, запрошенные у ОС под heap
@@ -30,7 +32,7 @@ func Runtime() model.RuntimeMetrics {
 		"HeapReleased": float64(ms.HeapReleased), // байты heap, возвращённые ОС
 		"HeapObjects":  float64(ms.HeapObjects),  // количество объектов в heap
 
-		// ===== GC =====
+		// GC metrics
 
 		"GCCPUFraction": float64(ms.GCCPUFraction), // доля CPU, потраченная на GC
 		"GCSys":         float64(ms.GCSys),         // байты под GC структуры
@@ -52,12 +54,12 @@ func Runtime() model.RuntimeMetrics {
 		"MSpanInuse":  float64(ms.MSpanInuse),  // используемые MSpan
 		"MSpanSys":    float64(ms.MSpanSys),    // MSpan от ОС
 
-		// ===== Прочее =====
+		// ===== Others =====
 
 		"BuckHashSys": float64(ms.BuckHashSys), // байты под hash buckets
 		"OtherSys":    float64(ms.OtherSys),    // прочие аллокации рантайма
 
-		// ===== Random Value =====
+		// RandomValue is used for testing/reporting purposes.
 
 		"RandomValue": rand.Float64(),
 	}

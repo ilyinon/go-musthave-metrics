@@ -8,6 +8,7 @@ import (
 	"github.com/ilyinon/go-musthave-metrics/internal/crypto"
 )
 
+// HashVerifier verifies request integrity using a hash.
 func HashVerifier(key string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

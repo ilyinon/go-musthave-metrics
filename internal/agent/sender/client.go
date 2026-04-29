@@ -23,12 +23,14 @@ var retryDelays = []time.Duration{
 	5 * time.Second,
 }
 
+// Client sends metrics to the server over HTTP.
 type Client struct {
 	baseURL string
 	client  *resty.Client
 	key     string
 }
 
+// New creates a new Client with the given base URL and optional signing key.
 func New(baseURL string, key string) *Client {
 	return &Client{
 		baseURL: baseURL,
@@ -38,6 +40,7 @@ func New(baseURL string, key string) *Client {
 	}
 }
 
+// Gauge sends a gauge metric to the server.
 func (c *Client) Gauge(name string, value float64) error {
 	val := strconv.FormatFloat(value, 'g', -1, 64)
 	uri := fmt.Sprintf(
@@ -49,6 +52,7 @@ func (c *Client) Gauge(name string, value float64) error {
 	return c.postWithRetry(uri)
 }
 
+// Counter sends a counter metric to the server.
 func (c *Client) Counter(name string, value int64) error {
 	uri := fmt.Sprintf(
 		"%s/update/counter/%s/%d",
@@ -85,6 +89,7 @@ func (c *Client) postWithRetry(uri string) error {
 	return lastErr
 }
 
+// Batch sends multiple metrics in a single request.
 func (c *Client) Batch(metrics []model.Metrics) error {
 	if len(metrics) == 0 {
 		return nil

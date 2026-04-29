@@ -12,8 +12,10 @@ import (
 	"github.com/ilyinon/go-musthave-metrics/internal/config"
 )
 
+// main configures the agent from environment variables and flags,
+// initializes the sender and starts metric collection and reporting.
 func main() {
-	// ===== defaults =====
+	// default configuration values
 	addr := &config.AgentAddress{
 		Host: "localhost",
 		Port: 8080,
@@ -24,9 +26,11 @@ func main() {
 
 	rateLimit := 1
 
-	// ===== env overrides =====
+	// environment variables override defaults
 	if v, ok := os.LookupEnv("ADDRESS"); ok {
-		_ = addr.Set(v)
+		if err := addr.Set(v); err != nil {
+			log.Println("invalid ADDRESS:", err)
+		}
 	}
 
 	if v, ok := os.LookupEnv("POLL_INTERVAL"); ok {
@@ -47,7 +51,7 @@ func main() {
 		}
 	}
 
-	// ===== flags override env =====
+	// command-line flags override environment variables
 	flag.Var(addr, "a", "server address host:port")
 	flag.Var(&poll, "p", "poll interval")
 	flag.Var(&report, "r", "report interval")

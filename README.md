@@ -42,3 +42,25 @@ git fetch template && git checkout template/v2 .github
 - **Clean Architecture**
 - **Hexagonal Architecture**
 - **Layered Architecture**
+
+
+## Запуск pprof
+
+# 
+
+```
+ pprof -top -diff_base=profiles/base.pprof_first profiles/base.pprof
+File: server
+Type: inuse_space
+Time: 2026-04-19 15:58:29 MSK
+Showing nodes accounting for -176.55MB, 90.82% of 194.39MB total
+Dropped 50 nodes (cum <= 0.97MB)
+      flat  flat%   sum%        cum   cum%
+  -90.79MB 46.70% 46.70%  -105.75MB 54.40%  compress/flate.NewWriter (inline)
+  -63.80MB 32.82% 79.53%   -63.80MB 32.82%  runtime.mallocgc
+  -14.96MB  7.70% 87.22%   -14.96MB  7.70%  compress/flate.(*compressor).initDeflate (inline)
+      -3MB  1.54% 88.77%       -3MB  1.54%  internal/sync.runtime_SemacquireMutex
+   -2.50MB  1.29% 90.05%    -2.50MB  1.29%  encoding/json.(*decodeState).literalStore
+      -2MB  1.03% 91.08%  -110.75MB 56.97%  github.com/ilyinon/go-musthave-metrics/internal/handler.(*UpdateJSONHandler).ServeHTTP
+    0.50MB  0.26% 90.82%     1.50MB  0.77%  net/http.ListenAndServe (inline)
+```

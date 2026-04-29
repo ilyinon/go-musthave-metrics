@@ -8,14 +8,17 @@ import (
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
 )
 
+// ValueJSONHandler handles requests for retrieving metric values in JSON format.
 type ValueJSONHandler struct {
 	storage repository.Storage
 }
 
+// NewValueJSON creates a new ValueJSONHandler.
 func NewValueJSON(storage repository.Storage) *ValueJSONHandler {
 	return &ValueJSONHandler{storage: storage}
 }
 
+// ServeHTTP processes a JSON request and returns the metric value.
 func (h *ValueJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Content-Type") != "application/json" {
 		http.Error(w, "invalid content type", http.StatusBadRequest)

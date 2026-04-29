@@ -11,16 +11,17 @@ import (
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
 )
 
+// IndexHandler renders the main page with metrics and handles health checks.
 type IndexHandler struct {
 	storage repository.Storage
 }
 
+// NewIndex creates a new IndexHandler.
 func NewIndex(storage repository.Storage) *IndexHandler {
 	return &IndexHandler{storage: storage}
 }
 
-// Ping checks database connection.
-// GET /ping
+// Ping checks the storage availability.
 func (h *IndexHandler) Ping(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 	defer cancel()

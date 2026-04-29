@@ -6,22 +6,24 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 
+	"github.com/ilyinon/go-musthave-metrics/internal/audit"
 	"github.com/ilyinon/go-musthave-metrics/internal/handler"
 	appmw "github.com/ilyinon/go-musthave-metrics/internal/middleware"
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
 )
 
-func New(storage repository.Storage, key string) http.Handler {
+// New initializes and returns an HTTP router with all endpoints configured.
+func New(storage repository.Storage, key string, auditor *audit.Auditor) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(chimw.RealIP)
 	r.Use(appmw.Logger)
 	r.Use(chimw.Recoverer)
 
-	// проверка входящего тела
+	// request validation
 	r.Use(appmw.HashVerifier(key))
 
-	// обработка ответа
+	// response processing
 	r.Use(appmw.Gzip)
 	r.Use(appmw.HashSigner(key))
 
@@ -30,15 +32,15 @@ func New(storage repository.Storage, key string) http.Handler {
 	r.Get("/", indexHandler.ServeHTTP)
 	r.Get("/ping", indexHandler.Ping)
 
-	r.Post("/update/{type}/{name}/{value}", handler.NewUpdate(storage).ServeHTTP)
-	r.Post("/update", handler.NewUpdateJSON(storage).ServeHTTP)
-	r.Post("/update/", handler.NewUpdateJSON(storage).ServeHTTP)
+	r.Post("/update/{type}/{name}/{value}", handler.NewUpdate(storage, auditor).ServeHTTP)
+	r.Post("/update", handler.NewUpdateJSON(storage, auditor).ServeHTTP)
+	r.Post("/update/", handler.NewUpdateJSON(storage, auditor).ServeHTTP)
 
 	r.Post("/value", handler.NewValueJSON(storage).ServeHTTP)
 	r.Post("/value/", handler.NewValueJSON(storage).ServeHTTP)
 	r.Get("/value/{type}/{name}", handler.NewValue(storage).ServeHTTP)
 
-	r.Post("/updates/", handler.NewUpdates(storage).ServeHTTP)
+	r.Post("/updates/", handler.NewUpdates(storage, auditor).ServeHTTP)
 
 	return r
 }
