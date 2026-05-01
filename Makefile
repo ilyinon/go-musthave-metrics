@@ -2,11 +2,19 @@ APP=metrics
 
 DB_URI=postgres://user:pass@localhost:5432/metrics?sslmode=disable
 
+BUILD_VERSION ?= 0.1.0
+BUILD_DATE := $(shell date +%Y-%m-%dT%H:%M:%S)
+BUILD_COMMIT := $(shell git rev-parse --short HEAD)
+
+LDFLAGS := -X main.buildVersion=$(BUILD_VERSION) \
+           -X main.buildDate=$(BUILD_DATE) \
+           -X main.buildCommit=$(BUILD_COMMIT)
+
 .PHONY: build run test up down migrate migrate-down
 
 build:
-	go build -o bin/server ./cmd/server/main.go
-	go build -o bin/agent ./cmd/agent/main.go
+	go build -ldflags "$(LDFLAGS)" -o bin/server ./cmd/server/main.go
+	go build -ldflags "$(LDFLAGS)" -o bin/agent ./cmd/agent/main.go
 	go build -o bin/staticlint ./cmd/staticlint
 
 run_server:

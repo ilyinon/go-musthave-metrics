@@ -26,13 +26,44 @@ import (
 	"github.com/ilyinon/go-musthave-metrics/internal/router"
 )
 
+var (
+	buildVersion string
+	buildDate    string
+	buildCommit  string
+)
+
+func printBuildInfo() {
+	version := buildVersion
+	if version == "" {
+		version = "N/A"
+	}
+
+	date := buildDate
+	if date == "" {
+		date = "N/A"
+	}
+
+	commit := buildCommit
+	if commit == "" {
+		commit = "N/A"
+	}
+
+	log.Printf("Build version: %s", version)
+	log.Printf("Build date: %s", date)
+	log.Printf("Build commit: %s", commit)
+}
+
 // main configures application components, initializes storage,
 // sets up audit sinks and starts the HTTP server.
+
 func main() {
 	storeInterval := 300 * time.Second
 	storeFile := "./metrics-db.json"
 	restore := true
 	dsn := ""
+
+	printBuildInfo()
+
 	var key string
 
 	var auditFile string
