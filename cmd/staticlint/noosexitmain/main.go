@@ -18,10 +18,6 @@ func run(pass *analysis.Pass) (interface{}, error) {
 		return nil, nil
 	}
 
-	if pass.Pkg.Name() != "main" {
-		return nil, nil
-	}
-
 	pkgPath := pass.Pkg.Path()
 
 	if pkgPath != "github.com/ilyinon/go-musthave-metrics/cmd/server" &&
