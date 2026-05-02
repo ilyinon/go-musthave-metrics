@@ -8,7 +8,7 @@ import (
 
 var Analyzer = &analysis.Analyzer{
 	Name: "noosexitmain",
-	Doc:  "reports calls to os.Exit, log.Fatal and panic outside main.main",
+	Doc:  "reports calls to os.Exit, log.Fatal*, and panic outside main.main",
 	Run:  run,
 }
 
