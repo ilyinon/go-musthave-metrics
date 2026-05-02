@@ -18,6 +18,7 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/ilyinon/go-musthave-metrics/internal/audit"
+	"github.com/ilyinon/go-musthave-metrics/internal/buildinfo"
 	"github.com/ilyinon/go-musthave-metrics/internal/config"
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
 	filestorage "github.com/ilyinon/go-musthave-metrics/internal/repository/file"
@@ -25,33 +26,6 @@ import (
 	"github.com/ilyinon/go-musthave-metrics/internal/repository/postgres"
 	"github.com/ilyinon/go-musthave-metrics/internal/router"
 )
-
-var (
-	buildVersion string
-	buildDate    string
-	buildCommit  string
-)
-
-func printBuildInfo() {
-	version := buildVersion
-	if version == "" {
-		version = "N/A"
-	}
-
-	date := buildDate
-	if date == "" {
-		date = "N/A"
-	}
-
-	commit := buildCommit
-	if commit == "" {
-		commit = "N/A"
-	}
-
-	log.Printf("Build version: %s", version)
-	log.Printf("Build date: %s", date)
-	log.Printf("Build commit: %s", commit)
-}
 
 // main configures application components, initializes storage,
 // sets up audit sinks and starts the HTTP server.
@@ -62,7 +36,7 @@ func main() {
 	restore := true
 	dsn := ""
 
-	printBuildInfo()
+	buildinfo.Print()
 
 	var key string
 

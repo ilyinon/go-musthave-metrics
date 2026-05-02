@@ -1,6 +1,6 @@
 package model
 
-// generate:reset
+// TestReset is a test structure used to validate reset code generation.
 type TestReset struct {
 	IntVal   int
 	StrVal   string

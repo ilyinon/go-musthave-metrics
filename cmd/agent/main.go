@@ -9,41 +9,15 @@ import (
 
 	"github.com/ilyinon/go-musthave-metrics/internal/agent"
 	"github.com/ilyinon/go-musthave-metrics/internal/agent/sender"
+	"github.com/ilyinon/go-musthave-metrics/internal/buildinfo"
 	"github.com/ilyinon/go-musthave-metrics/internal/config"
 )
-
-var (
-	buildVersion string
-	buildDate    string
-	buildCommit  string
-)
-
-func printBuildInfo() {
-	version := buildVersion
-	if version == "" {
-		version = "N/A"
-	}
-
-	date := buildDate
-	if date == "" {
-		date = "N/A"
-	}
-
-	commit := buildCommit
-	if commit == "" {
-		commit = "N/A"
-	}
-
-	log.Printf("Build version: %s", version)
-	log.Printf("Build date: %s", date)
-	log.Printf("Build commit: %s", commit)
-}
 
 // main configures the agent from environment variables and flags,
 // initializes the sender and starts metric collection and reporting.
 func main() {
 
-	printBuildInfo()
+	buildinfo.Print()
 
 	// default configuration values
 	addr := &config.AgentAddress{

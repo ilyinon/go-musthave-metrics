@@ -6,9 +6,9 @@ BUILD_VERSION ?= 0.1.0
 BUILD_DATE := $(shell date +%Y-%m-%dT%H:%M:%S)
 BUILD_COMMIT := $(shell git rev-parse --short HEAD)
 
-LDFLAGS := -X main.buildVersion=$(BUILD_VERSION) \
-           -X main.buildDate=$(BUILD_DATE) \
-           -X main.buildCommit=$(BUILD_COMMIT)
+LDFLAGS := -X github.com/ilyinon/go-musthave-metrics/internal/buildinfo.Version=$(BUILD_VERSION) \
+           -X github.com/ilyinon/go-musthave-metrics/internal/buildinfo.Date=$(BUILD_DATE) \
+           -X github.com/ilyinon/go-musthave-metrics/internal/buildinfo.Commit=$(BUILD_COMMIT)
 
 .PHONY: build run test up down migrate migrate-down
 
