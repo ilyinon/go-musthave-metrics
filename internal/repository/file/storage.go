@@ -29,7 +29,7 @@ func (s *Storage) Ping(ctx context.Context) error {
 	return s.mem.Ping(ctx)
 }
 
-// Proxy methods delegate calls to the underlying storage.
+// UpdateGauge updates gauge metric value in storage.
 func (s *Storage) UpdateGauge(ctx context.Context, name string, value float64) {
 	s.mem.UpdateGauge(ctx, name, value)
 }

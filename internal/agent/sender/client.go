@@ -121,7 +121,8 @@ func (c *Client) batchOnce(metrics []model.Metrics) error {
 
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
-	if _, err := gz.Write(raw); err != nil {
+	_, err = gz.Write(raw)
+	if err != nil {
 		return err
 	}
 	_ = gz.Close()

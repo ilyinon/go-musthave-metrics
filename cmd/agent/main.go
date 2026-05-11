@@ -9,12 +9,16 @@ import (
 
 	"github.com/ilyinon/go-musthave-metrics/internal/agent"
 	"github.com/ilyinon/go-musthave-metrics/internal/agent/sender"
+	"github.com/ilyinon/go-musthave-metrics/internal/buildinfo"
 	"github.com/ilyinon/go-musthave-metrics/internal/config"
 )
 
 // main configures the agent from environment variables and flags,
 // initializes the sender and starts metric collection and reporting.
 func main() {
+
+	buildinfo.Print()
+
 	// default configuration values
 	addr := &config.AgentAddress{
 		Host: "localhost",
