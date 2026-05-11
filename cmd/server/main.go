@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
 	"database/sql"
 	"flag"
 	"log"
@@ -9,13 +10,6 @@ import (
 	"os"
 	"strconv"
 	"time"
-
-	"github.com/golang-migrate/migrate/v4"
-	migratepg "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
-	_ "github.com/jackc/pgx/v5/stdlib"
-
-	_ "net/http/pprof"
 
 	"github.com/ilyinon/go-musthave-metrics/internal/audit"
 	"github.com/ilyinon/go-musthave-metrics/internal/buildinfo"
@@ -25,11 +19,21 @@ import (
 	"github.com/ilyinon/go-musthave-metrics/internal/repository/mem"
 	"github.com/ilyinon/go-musthave-metrics/internal/repository/postgres"
 	"github.com/ilyinon/go-musthave-metrics/internal/router"
+
+	appmw "github.com/ilyinon/go-musthave-metrics/internal/middleware"
+
+	"github.com/golang-migrate/migrate/v4"
+	migratepg "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	_ "github.com/jackc/pgx/v5/stdlib"
+
+	_ "net/http/pprof"
+
+	"github.com/ilyinon/go-musthave-metrics/internal/crypto"
 )
 
 // main configures application components, initializes storage,
 // sets up audit sinks and starts the HTTP server.
-
 func main() {
 	storeInterval := 300 * time.Second
 	storeFile := "./metrics-db.json"
@@ -39,6 +43,7 @@ func main() {
 	buildinfo.Print()
 
 	var key string
+	var cryptoKeyPath string
 
 	var auditFile string
 	var auditURL string
@@ -87,6 +92,8 @@ func main() {
 	flag.StringVar(&key, "k", "", "signing key")
 	flag.StringVar(&auditFile, "audit-file", auditFile, "audit file path")
 	flag.StringVar(&auditURL, "audit-url", auditURL, "audit url")
+	// новый флаг для приватного ключа
+	flag.StringVar(&cryptoKeyPath, "crypto-key", "", "path to private key for decryption")
 	flag.Parse()
 
 	if dsn == "" {
@@ -94,6 +101,9 @@ func main() {
 	}
 	if key == "" {
 		key = os.Getenv("KEY")
+	}
+	if cryptoKeyPath == "" {
+		cryptoKeyPath = os.Getenv("CRYPTO_KEY")
 	}
 
 	// initialize audit sinks
@@ -114,6 +124,19 @@ func main() {
 
 	if len(sinks) > 0 {
 		auditor = audit.New(sinks...)
+	}
+
+	// load private key for decryption
+	var privateKey *rsa.PrivateKey
+	if cryptoKeyPath != "" {
+		privData, err := os.ReadFile(cryptoKeyPath)
+		if err != nil {
+			log.Fatalf("failed to read private key: %v", err)
+		}
+		privateKey, err = crypto.ParseRSAPrivateKey(privData)
+		if err != nil {
+			log.Fatalf("failed to parse private key: %v", err)
+		}
 	}
 
 	// initialize storage backend
@@ -191,6 +214,9 @@ func main() {
 
 	// start HTTP server
 	handler := router.New(storage, key, auditor)
+	if privateKey != nil {
+		handler = appmw.DecryptRSA(privateKey)(handler)
+	}
 
 	log.Printf("starting server on %s", addr.String())
 	log.Fatal(http.ListenAndServe(addr.String(), handler))

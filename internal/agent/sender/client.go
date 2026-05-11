@@ -15,6 +15,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/ilyinon/go-musthave-metrics/internal/crypto"
 	"github.com/ilyinon/go-musthave-metrics/internal/model"
+	"crypto/rsa"
 )
 
 var retryDelays = []time.Duration{
@@ -25,9 +26,10 @@ var retryDelays = []time.Duration{
 
 // Client sends metrics to the server over HTTP.
 type Client struct {
-	baseURL string
-	client  *resty.Client
-	key     string
+	baseURL   string
+	client    *resty.Client
+	key       string
+	publicKey *rsa.PublicKey
 }
 
 // New creates a new Client with the given base URL and optional signing key.
@@ -35,31 +37,25 @@ func New(baseURL string, key string) *Client {
 	return &Client{
 		baseURL: baseURL,
 		key:     key,
-		client: resty.New().
-			SetTimeout(3 * time.Second),
+		client:  resty.New().SetTimeout(3 * time.Second),
 	}
+}
+
+// SetPublicKey sets the RSA public key for encryption.
+func (c *Client) SetPublicKey(pub *rsa.PublicKey) {
+	c.publicKey = pub
 }
 
 // Gauge sends a gauge metric to the server.
 func (c *Client) Gauge(name string, value float64) error {
 	val := strconv.FormatFloat(value, 'g', -1, 64)
-	uri := fmt.Sprintf(
-		"%s/update/gauge/%s/%s",
-		c.baseURL,
-		url.PathEscape(name),
-		val,
-	)
+	uri := fmt.Sprintf("%s/update/gauge/%s/%s", c.baseURL, url.PathEscape(name), val)
 	return c.postWithRetry(uri)
 }
 
 // Counter sends a counter metric to the server.
 func (c *Client) Counter(name string, value int64) error {
-	uri := fmt.Sprintf(
-		"%s/update/counter/%s/%d",
-		c.baseURL,
-		url.PathEscape(name),
-		value,
-	)
+	uri := fmt.Sprintf("%s/update/counter/%s/%d", c.baseURL, url.PathEscape(name), value)
 	return c.postWithRetry(uri)
 }
 
@@ -67,7 +63,20 @@ func (c *Client) postWithRetry(uri string) error {
 	var lastErr error
 
 	for i := 0; i <= len(retryDelays); i++ {
-		resp, err := c.client.R().Post(uri)
+		raw := []byte{}
+
+		req := c.client.R()
+
+		if c.publicKey != nil {
+			var err error
+			raw, err = crypto.EncryptRSA(c.publicKey, raw)
+			if err != nil {
+				return err
+			}
+			req.SetBody(raw)
+		}
+
+		resp, err := req.Post(uri)
 		if err == nil && !resp.IsError() {
 			log.Printf("[DEBUG] POST %s -> %s", uri, resp.Status())
 			return nil
@@ -127,18 +136,25 @@ func (c *Client) batchOnce(metrics []model.Metrics) error {
 	}
 	_ = gz.Close()
 
+	payload := buf.Bytes()
+	if c.publicKey != nil {
+		payload, err = crypto.EncryptRSA(c.publicKey, payload)
+		if err != nil {
+			return err
+		}
+	}
+
 	req := c.client.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Content-Encoding", "gzip").
-		SetBody(&buf)
+		SetBody(payload)
 
 	if c.key != "" {
-		hash := crypto.HashSHA256(buf.Bytes(), c.key)
+		hash := crypto.HashSHA256(payload, c.key)
 		req.SetHeader("HashSHA256", hash)
 	}
 
 	resp, err := req.Post(c.baseURL + "/updates/")
-
 	if err != nil {
 		return err
 	}
