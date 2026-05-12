@@ -84,7 +84,9 @@ func main() {
 	flag.StringVar(&configFile, "c", "", "path to JSON config file")
 	flag.StringVar(&configFile, "config", "", "path to JSON config file")
 
-	// читаем config до flag.Parse, чтобы применить только если значения дефолтные
+	// парсим флаги до чтения config, чтобы -c/-config реально задавали путь к файлу
+	flag.Parse()
+
 	if configFile == "" {
 		if env := os.Getenv("CONFIG"); env != "" {
 			configFile = env
@@ -126,9 +128,6 @@ func main() {
 			cryptoKeyPath = cfg.CryptoKey
 		}
 	}
-
-	// парсим флаги, чтобы они имели самый высокий приоритет
-	flag.Parse()
 
 	// fallback на переменные окружения, если флаги и JSON не задали
 	if key == "" {

@@ -33,3 +33,4 @@ audit.log
 .DS_Store
 public.pem
 private.pem
+file.db

@@ -3,6 +3,7 @@ package sender
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/rsa"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,7 +16,6 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/ilyinon/go-musthave-metrics/internal/crypto"
 	"github.com/ilyinon/go-musthave-metrics/internal/model"
-	"crypto/rsa"
 )
 
 var retryDelays = []time.Duration{
@@ -48,6 +48,14 @@ func (c *Client) SetPublicKey(pub *rsa.PublicKey) {
 
 // Gauge sends a gauge metric to the server.
 func (c *Client) Gauge(name string, value float64) error {
+	if c.publicKey != nil {
+		return c.metricJSONWithRetry(model.Metrics{
+			ID:    name,
+			MType: model.MetricGauge,
+			Value: &value,
+		})
+	}
+
 	val := strconv.FormatFloat(value, 'g', -1, 64)
 	uri := fmt.Sprintf("%s/update/gauge/%s/%s", c.baseURL, url.PathEscape(name), val)
 	return c.postWithRetry(uri)
@@ -55,6 +63,14 @@ func (c *Client) Gauge(name string, value float64) error {
 
 // Counter sends a counter metric to the server.
 func (c *Client) Counter(name string, value int64) error {
+	if c.publicKey != nil {
+		return c.metricJSONWithRetry(model.Metrics{
+			ID:    name,
+			MType: model.MetricCounter,
+			Delta: &value,
+		})
+	}
+
 	uri := fmt.Sprintf("%s/update/counter/%s/%d", c.baseURL, url.PathEscape(name), value)
 	return c.postWithRetry(uri)
 }
@@ -104,6 +120,15 @@ func (c *Client) Batch(metrics []model.Metrics) error {
 		return nil
 	}
 
+	if c.publicKey != nil {
+		for _, m := range metrics {
+			if err := c.metricJSONWithRetry(m); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	var lastErr error
 
 	for i := 0; i <= len(retryDelays); i++ {
@@ -136,25 +161,7 @@ func (c *Client) batchOnce(metrics []model.Metrics) error {
 	}
 	_ = gz.Close()
 
-	payload := buf.Bytes()
-	if c.publicKey != nil {
-		payload, err = crypto.EncryptRSA(c.publicKey, payload)
-		if err != nil {
-			return err
-		}
-	}
-
-	req := c.client.R().
-		SetHeader("Content-Type", "application/json").
-		SetHeader("Content-Encoding", "gzip").
-		SetBody(payload)
-
-	if c.key != "" {
-		hash := crypto.HashSHA256(payload, c.key)
-		req.SetHeader("HashSHA256", hash)
-	}
-
-	resp, err := req.Post(c.baseURL + "/updates/")
+	resp, err := c.postPayload(c.baseURL+"/updates/", buf.Bytes(), "application/json", "gzip")
 	if err != nil {
 		return err
 	}
@@ -165,6 +172,71 @@ func (c *Client) batchOnce(metrics []model.Metrics) error {
 
 	log.Printf("[DEBUG] POST %s/updates/ -> %s", c.baseURL, resp.Status())
 	return nil
+}
+
+func (c *Client) metricJSONWithRetry(metric model.Metrics) error {
+	var lastErr error
+
+	for i := 0; i <= len(retryDelays); i++ {
+		lastErr = c.metricJSONOnce(metric)
+		if lastErr == nil {
+			return nil
+		}
+
+		if !isRetriableHTTPError(lastErr) || i == len(retryDelays) {
+			break
+		}
+
+		time.Sleep(retryDelays[i])
+	}
+
+	return lastErr
+}
+
+func (c *Client) metricJSONOnce(metric model.Metrics) error {
+	payload, err := json.Marshal(metric)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.postPayload(c.baseURL+"/update", payload, "application/json", "")
+	if err != nil {
+		return err
+	}
+
+	if resp.IsError() {
+		return fmt.Errorf("metric http status %d", resp.StatusCode())
+	}
+
+	log.Printf("[DEBUG] POST %s/update -> %s", c.baseURL, resp.Status())
+	return nil
+}
+
+func (c *Client) postPayload(uri string, payload []byte, contentType string, contentEncoding string) (*resty.Response, error) {
+	body := payload
+
+	req := c.client.R()
+	if contentType != "" {
+		req.SetHeader("Content-Type", contentType)
+	}
+	if contentEncoding != "" {
+		req.SetHeader("Content-Encoding", contentEncoding)
+	}
+
+	if c.key != "" {
+		hash := crypto.HashSHA256(payload, c.key)
+		req.SetHeader("HashSHA256", hash)
+	}
+
+	if c.publicKey != nil {
+		encrypted, err := crypto.EncryptRSA(c.publicKey, payload)
+		if err != nil {
+			return nil, err
+		}
+		body = encrypted
+	}
+
+	return req.SetBody(body).Post(uri)
 }
 
 func isRetriableHTTPError(err error) bool {

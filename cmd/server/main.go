@@ -113,6 +113,8 @@ func main() {
 	flag.StringVar(&configFile, "c", "", "path to JSON config file")
 	flag.StringVar(&configFile, "config", "", "path to JSON config file")
 
+	flag.Parse()
+
 	if configFile == "" {
 		if env := os.Getenv("CONFIG"); env != "" {
 			configFile = env
@@ -152,8 +154,6 @@ func main() {
 			cryptoKeyPath = cfg.CryptoKey
 		}
 	}
-
-	flag.Parse()
 
 	if dsn == "" {
 		dsn = os.Getenv("DATABASE_DSN")

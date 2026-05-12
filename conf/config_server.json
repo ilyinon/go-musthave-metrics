@@ -1,8 +1,8 @@
 {
-    "address": "localhost:8080", // аналог переменной окружения ADDRESS или флага -a
-    "restore": true, // аналог переменной окружения RESTORE или флага -r
-    "store_interval": "1s", // аналог переменной окружения STORE_INTERVAL или флага -i
-    "store_file": "file.db", // аналог переменной окружения STORE_FILE или -f
-    "database_dsn": "", // аналог переменной окружения DATABASE_DSN или флага -d
-    "crypto_key": "private.pem" // аналог переменной окружения CRYPTO_KEY или флага -crypto-key
-} 
+  "address": "localhost:8080",
+  "restore": true,
+  "store_interval": "1s",
+  "store_file": "file.db",
+  "database_dsn": "",
+  "crypto_key": "private.pem"
+}

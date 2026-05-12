@@ -1,9 +1,16 @@
 package sender
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	appcrypto "github.com/ilyinon/go-musthave-metrics/internal/crypto"
+	"github.com/ilyinon/go-musthave-metrics/internal/model"
 )
 
 func TestNewClient(t *testing.T) {
@@ -44,6 +51,68 @@ func TestSendGaugeAndCounter(t *testing.T) {
 	for i := range want {
 		if paths[i] != want[i] {
 			t.Errorf("path mismatch: got %s, want %s", paths[i], want[i])
+		}
+	}
+}
+
+func TestBatchWithPublicKeySendsEncryptedSignedJSONMetrics(t *testing.T) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const key = "test-key"
+
+	var got []model.Metrics
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/update" {
+			t.Errorf("path mismatch: got %s, want /update", r.URL.Path)
+		}
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		decrypted, err := appcrypto.DecryptRSA(privateKey, body)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if want := appcrypto.HashSHA256(decrypted, key); r.Header.Get("HashSHA256") != want {
+			t.Fatalf("hash mismatch: got %s, want %s", r.Header.Get("HashSHA256"), want)
+		}
+
+		var metric model.Metrics
+		if err := json.Unmarshal(decrypted, &metric); err != nil {
+			t.Fatal(err)
+		}
+
+		got = append(got, metric)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	gaugeValue := 12.34
+	counterValue := int64(5)
+	metrics := []model.Metrics{
+		{ID: "TestGauge", MType: model.MetricGauge, Value: &gaugeValue},
+		{ID: "TestCounter", MType: model.MetricCounter, Delta: &counterValue},
+	}
+
+	client := New(server.URL, key)
+	client.SetPublicKey(&privateKey.PublicKey)
+
+	if err := client.Batch(metrics); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(got) != len(metrics) {
+		t.Fatalf("expected %d requests, got %d", len(metrics), len(got))
+	}
+	for i := range metrics {
+		if got[i].ID != metrics[i].ID || got[i].MType != metrics[i].MType {
+			t.Fatalf("metric mismatch: got %+v, want %+v", got[i], metrics[i])
 		}
 	}
 }
