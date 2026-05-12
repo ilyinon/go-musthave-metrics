@@ -9,12 +9,26 @@ import (
 
 type hashResponseWriter struct {
 	http.ResponseWriter
-	buf *bytes.Buffer
+	buf        *bytes.Buffer
+	statusCode int
+	wroteHead  bool
 }
 
 func (w *hashResponseWriter) Write(b []byte) (int, error) {
-	w.buf.Write(b)
-	return w.ResponseWriter.Write(b)
+	if !w.wroteHead {
+		w.WriteHeader(http.StatusOK)
+	}
+
+	return w.buf.Write(b)
+}
+
+func (w *hashResponseWriter) WriteHeader(statusCode int) {
+	if w.wroteHead {
+		return
+	}
+
+	w.statusCode = statusCode
+	w.wroteHead = true
 }
 
 // HashSigner is a middleware that calculates HMAC-SHA256 hash
@@ -31,12 +45,15 @@ func HashSigner(key string) func(http.Handler) http.Handler {
 			hw := &hashResponseWriter{
 				ResponseWriter: w,
 				buf:            buf,
+				statusCode:     http.StatusOK,
 			}
 
 			next.ServeHTTP(hw, r)
 
 			hash := crypto.HashSHA256(buf.Bytes(), key)
 			w.Header().Set("HashSHA256", hash)
+			w.WriteHeader(hw.statusCode)
+			_, _ = w.Write(buf.Bytes())
 		})
 	}
 }

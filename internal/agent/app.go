@@ -25,6 +25,8 @@ type App struct {
 	mu       sync.RWMutex
 	gauges   model.RuntimeMetrics
 	counters model.CustomMetrics
+
+	lastCounters model.CustomMetrics
 }
 
 // New creates a new App with the given configuration.
@@ -44,6 +46,7 @@ func New(
 		pollInterval:   poll,
 		reportInterval: report,
 		rateLimit:      rateLimit,
+		lastCounters:   make(model.CustomMetrics),
 	}
 }
 
@@ -126,8 +129,8 @@ func (a *App) collect() {
 }
 
 func (a *App) metricsBatch() []model.Metrics {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
+	a.mu.Lock()
+	defer a.mu.Unlock()
 
 	batch := make([]model.Metrics, 0, len(a.gauges)+len(a.counters))
 
@@ -141,7 +144,15 @@ func (a *App) metricsBatch() []model.Metrics {
 	}
 
 	for k, v := range a.counters {
-		delta := v
+		delta := v - a.lastCounters[k]
+		if delta == 0 {
+			continue
+		}
+		if delta < 0 {
+			delta = v
+		}
+
+		a.lastCounters[k] = v
 		batch = append(batch, model.Metrics{
 			ID:    k,
 			MType: model.MetricCounter,

@@ -60,6 +60,7 @@ func main() {
 
 	var auditFile string
 	var auditURL string
+	restoreConfigured := false
 
 	pprofServer := &http.Server{Addr: "localhost:6060"}
 	go func() {
@@ -88,6 +89,7 @@ func main() {
 	if v, ok := os.LookupEnv("RESTORE"); ok {
 		if b, err := strconv.ParseBool(v); err == nil {
 			restore = b
+			restoreConfigured = true
 		}
 	}
 	if v, ok := os.LookupEnv("AUDIT_FILE"); ok {
@@ -114,6 +116,11 @@ func main() {
 	flag.StringVar(&configFile, "config", "", "path to JSON config file")
 
 	flag.Parse()
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "r" {
+			restoreConfigured = true
+		}
+	})
 
 	if configFile == "" {
 		if env := os.Getenv("CONFIG"); env != "" {
@@ -144,7 +151,7 @@ func main() {
 				storeInterval = d
 			}
 		}
-		if cfg.Restore != nil && !restore {
+		if cfg.Restore != nil && !restoreConfigured {
 			restore = *cfg.Restore
 		}
 		if cfg.DatabaseDSN != "" && dsn == "" {
