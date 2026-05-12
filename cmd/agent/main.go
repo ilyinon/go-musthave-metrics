@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"log"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"crypto/rsa"
@@ -168,5 +171,14 @@ func main() {
 		rateLimit,
 	)
 
-	app.Run()
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		syscall.SIGTERM,
+		syscall.SIGINT,
+		syscall.SIGQUIT,
+	)
+	defer stop()
+
+	app.Run(ctx)
+	log.Println("agent stopped")
 }

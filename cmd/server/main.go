@@ -5,11 +5,14 @@ import (
 	"crypto/rsa"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"flag"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/ilyinon/go-musthave-metrics/internal/audit"
@@ -58,8 +61,9 @@ func main() {
 	var auditFile string
 	var auditURL string
 
+	pprofServer := &http.Server{Addr: "localhost:6060"}
 	go func() {
-		if err := http.ListenAndServe("localhost:6060", nil); err != nil {
+		if err := pprofServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Println("pprof server error:", err)
 		}
 	}()
@@ -196,6 +200,8 @@ func main() {
 
 	// initialize storage backend
 	var storage repository.Storage
+	var fileStorage *filestorage.Storage
+	var stopPeriodicSave func()
 
 	if dsn != "" {
 		db, err := sql.Open("pgx", dsn)
@@ -241,6 +247,7 @@ func main() {
 		storage = memStorage
 
 		fs := filestorage.New(memStorage, storeFile)
+		fileStorage = fs
 
 		if restore {
 			if err := fs.Restore(); err != nil {
@@ -249,12 +256,27 @@ func main() {
 		}
 
 		if storeInterval > 0 {
+			saveCtx, stopSave := context.WithCancel(context.Background())
+			saveDone := make(chan struct{})
+			stopPeriodicSave = func() {
+				stopSave()
+				<-saveDone
+			}
+
 			go func() {
+				defer close(saveDone)
+
 				t := time.NewTicker(storeInterval)
 				defer t.Stop()
-				for range t.C {
-					if err := fs.Save(); err != nil {
-						log.Println("save error:", err)
+
+				for {
+					select {
+					case <-t.C:
+						if err := fs.Save(); err != nil {
+							log.Println("save error:", err)
+						}
+					case <-saveCtx.Done():
+						return
 					}
 				}
 			}()
@@ -273,6 +295,60 @@ func main() {
 		handler = appmw.DecryptRSA(privateKey)(handler)
 	}
 
-	log.Printf("starting server on %s", addr.String())
-	log.Fatal(http.ListenAndServe(addr.String(), handler))
+	server := &http.Server{
+		Addr:    addr.String(),
+		Handler: handler,
+	}
+	serverErr := make(chan error, 1)
+
+	go func() {
+		log.Printf("starting server on %s", addr.String())
+		serverErr <- server.ListenAndServe()
+	}()
+
+	shutdownCtx, stop := signal.NotifyContext(
+		context.Background(),
+		syscall.SIGTERM,
+		syscall.SIGINT,
+		syscall.SIGQUIT,
+	)
+	defer stop()
+
+	select {
+	case err := <-serverErr:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal(err)
+		}
+
+	case <-shutdownCtx.Done():
+		log.Println("shutdown signal received")
+		stop()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if err := server.Shutdown(ctx); err != nil {
+			log.Printf("server shutdown error: %v", err)
+		}
+
+		if err := pprofServer.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("pprof shutdown error: %v", err)
+		}
+
+		if err := <-serverErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("server error: %v", err)
+		}
+
+		if stopPeriodicSave != nil {
+			stopPeriodicSave()
+		}
+
+		if fileStorage != nil {
+			if err := fileStorage.Save(); err != nil {
+				log.Printf("final save error: %v", err)
+			}
+		}
+
+		log.Println("server stopped")
+	}
 }

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"log"
 	"sync"
 	"time"
@@ -47,7 +48,11 @@ func New(
 }
 
 // Run starts metric collection and reporting loops.
-func (a *App) Run() {
+func (a *App) Run(ctx context.Context) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	pollTicker := time.NewTicker(a.pollInterval)
 	reportTicker := time.NewTicker(a.reportInterval)
 	defer pollTicker.Stop()
@@ -56,72 +61,116 @@ func (a *App) Run() {
 	// worker pool for sending metrics batches concurrently
 	sendCh := make(chan []model.Metrics, a.rateLimit)
 
+	var wg sync.WaitGroup
 	for i := 0; i < a.rateLimit; i++ {
+		wg.Add(1)
 		go func() {
-			for batch := range sendCh {
-				if err := a.client.Batch(batch); err != nil {
-					log.Printf("ERROR: batch send failed, fallback to single: %v", err)
+			defer wg.Done()
 
-					for _, m := range batch {
-						switch m.MType {
-						case model.MetricGauge:
-							a.client.Gauge(m.ID, *m.Value)
-						case model.MetricCounter:
-							a.client.Counter(m.ID, *m.Delta)
-						}
-					}
-				}
+			for batch := range sendCh {
+				a.sendBatch(batch)
 			}
 		}()
 	}
 
+	dirty := false
+
 	for {
 		select {
-		case <-pollTicker.C:
-			g := collector.Runtime()
-
-			for k, v := range collector.Gopsutil() {
-				g[k] = v
+		case <-ctx.Done():
+			if dirty {
+				if batch := a.metricsBatch(); len(batch) > 0 {
+					sendCh <- batch
+				}
 			}
+			close(sendCh)
+			wg.Wait()
+			return
 
-			c := collector.Custom()
-
-			a.mu.Lock()
-			a.gauges = g
-			a.counters = c
-			a.mu.Unlock()
+		case <-pollTicker.C:
+			a.collect()
+			dirty = true
 
 		case <-reportTicker.C:
-			var batch []model.Metrics
-
-			a.mu.RLock()
-			g := a.gauges
-			c := a.counters
-			a.mu.RUnlock()
-
-			for k, v := range g {
-				val := v
-				batch = append(batch, model.Metrics{
-					ID:    k,
-					MType: model.MetricGauge,
-					Value: &val,
-				})
-			}
-
-			for k, v := range c {
-				delta := v
-				batch = append(batch, model.Metrics{
-					ID:    k,
-					MType: model.MetricCounter,
-					Delta: &delta,
-				})
-			}
-
+			batch := a.metricsBatch()
 			if len(batch) == 0 {
 				continue
 			}
 
-			sendCh <- batch
+			select {
+			case sendCh <- batch:
+				dirty = false
+			case <-ctx.Done():
+				sendCh <- batch
+				close(sendCh)
+				wg.Wait()
+				return
+			}
+		}
+	}
+}
+
+func (a *App) collect() {
+	g := collector.Runtime()
+
+	for k, v := range collector.Gopsutil() {
+		g[k] = v
+	}
+
+	c := collector.Custom()
+
+	a.mu.Lock()
+	a.gauges = g
+	a.counters = c
+	a.mu.Unlock()
+}
+
+func (a *App) metricsBatch() []model.Metrics {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	batch := make([]model.Metrics, 0, len(a.gauges)+len(a.counters))
+
+	for k, v := range a.gauges {
+		val := v
+		batch = append(batch, model.Metrics{
+			ID:    k,
+			MType: model.MetricGauge,
+			Value: &val,
+		})
+	}
+
+	for k, v := range a.counters {
+		delta := v
+		batch = append(batch, model.Metrics{
+			ID:    k,
+			MType: model.MetricCounter,
+			Delta: &delta,
+		})
+	}
+
+	return batch
+}
+
+func (a *App) sendBatch(batch []model.Metrics) {
+	if err := a.client.Batch(batch); err == nil {
+		return
+	} else {
+		log.Printf("ERROR: batch send failed, fallback to single: %v", err)
+	}
+
+	for _, m := range batch {
+		var err error
+
+		switch m.MType {
+		case model.MetricGauge:
+			err = a.client.Gauge(m.ID, *m.Value)
+		case model.MetricCounter:
+			err = a.client.Counter(m.ID, *m.Delta)
+		}
+
+		if err != nil {
+			log.Printf("ERROR: metric send failed: id=%s type=%s err=%v", m.ID, m.MType, err)
 		}
 	}
 }
