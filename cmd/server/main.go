@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rsa"
 	"database/sql"
+	"encoding/json"
 	"flag"
 	"log"
 	"net/http"
@@ -31,6 +32,15 @@ import (
 
 	"github.com/ilyinon/go-musthave-metrics/internal/crypto"
 )
+
+type ServerConfigFile struct {
+	Address       string `json:"address"`
+	Restore       *bool  `json:"restore"`
+	StoreInterval string `json:"store_interval"`
+	StoreFile     string `json:"store_file"`
+	DatabaseDSN   string `json:"database_dsn"`
+	CryptoKey     string `json:"crypto_key"`
+}
 
 // main configures application components, initializes storage,
 // sets up audit sinks and starts the HTTP server.
@@ -94,6 +104,51 @@ func main() {
 	flag.StringVar(&auditURL, "audit-url", auditURL, "audit url")
 	// новый флаг для приватного ключа
 	flag.StringVar(&cryptoKeyPath, "crypto-key", "", "path to private key for decryption")
+
+	var configFile string
+	flag.StringVar(&configFile, "c", "", "path to JSON config file")
+	flag.StringVar(&configFile, "config", "", "path to JSON config file")
+
+	if configFile == "" {
+		if env := os.Getenv("CONFIG"); env != "" {
+			configFile = env
+		}
+	}
+
+	if configFile != "" {
+		data, err := os.ReadFile(configFile)
+		if err != nil {
+			log.Fatalf("failed to read config file: %v", err)
+		}
+
+		var cfg ServerConfigFile
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			log.Fatalf("failed to parse config file: %v", err)
+		}
+
+		// Применяем только если флаг/ENV не установлен
+		if cfg.Address != "" && addr.String() == "localhost:8080" {
+			addr.Set(cfg.Address)
+		}
+		if cfg.StoreFile != "" && storeFile == "./metrics-db.json" {
+			storeFile = cfg.StoreFile
+		}
+		if cfg.StoreInterval != "" && storeInterval == 300*time.Second {
+			if d, err := time.ParseDuration(cfg.StoreInterval); err == nil {
+				storeInterval = d
+			}
+		}
+		if cfg.Restore != nil && !restore {
+			restore = *cfg.Restore
+		}
+		if cfg.DatabaseDSN != "" && dsn == "" {
+			dsn = cfg.DatabaseDSN
+		}
+		if cfg.CryptoKey != "" && cryptoKeyPath == "" {
+			cryptoKeyPath = cfg.CryptoKey
+		}
+	}
+
 	flag.Parse()
 
 	if dsn == "" {
