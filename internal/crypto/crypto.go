@@ -1,12 +1,25 @@
 package crypto
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 )
+
+const aesKeySize = 32
+
+type encryptedPayload struct {
+	Key   string `json:"key"`
+	Nonce string `json:"nonce"`
+	Data  string `json:"data"`
+}
 
 // ParseRSAPublicKey to agent
 func ParseRSAPublicKey(data []byte) (*rsa.PublicKey, error) {
@@ -49,12 +62,82 @@ func ParseRSAPrivateKey(data []byte) (*rsa.PrivateKey, error) {
 	return key, nil
 }
 
-// EncryptRSA to agent
-func EncryptRSA(pub *rsa.PublicKey, data []byte) ([]byte, error) {
-	return rsa.EncryptPKCS1v15(rand.Reader, pub, data)
+// EncryptHybridRSA encrypts data with AES-GCM and encrypts the AES key with RSA-OAEP.
+func EncryptHybridRSA(pub *rsa.PublicKey, data []byte) ([]byte, error) {
+	aesKey := make([]byte, aesKeySize)
+	if _, err := rand.Read(aesKey); err != nil {
+		return nil, err
+	}
+
+	block, err := aes.NewCipher(aesKey)
+	if err != nil {
+		return nil, err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, err
+	}
+
+	encryptedKey, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, pub, aesKey, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	payload := encryptedPayload{
+		Key:   base64.StdEncoding.EncodeToString(encryptedKey),
+		Nonce: base64.StdEncoding.EncodeToString(nonce),
+		Data:  base64.StdEncoding.EncodeToString(gcm.Seal(nil, nonce, data, nil)),
+	}
+
+	return json.Marshal(payload)
 }
 
-// DecryptRSA to server
-func DecryptRSA(priv *rsa.PrivateKey, data []byte) ([]byte, error) {
-	return rsa.DecryptPKCS1v15(rand.Reader, priv, data)
+// DecryptHybridRSA decrypts data encrypted by EncryptHybridRSA.
+func DecryptHybridRSA(priv *rsa.PrivateKey, data []byte) ([]byte, error) {
+	var payload encryptedPayload
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return nil, err
+	}
+	if payload.Key == "" || payload.Nonce == "" || payload.Data == "" {
+		return nil, errors.New("invalid encrypted payload")
+	}
+
+	encryptedKey, err := base64.StdEncoding.DecodeString(payload.Key)
+	if err != nil {
+		return nil, err
+	}
+	nonce, err := base64.StdEncoding.DecodeString(payload.Nonce)
+	if err != nil {
+		return nil, err
+	}
+	ciphertext, err := base64.StdEncoding.DecodeString(payload.Data)
+	if err != nil {
+		return nil, err
+	}
+
+	aesKey, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, priv, encryptedKey, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	block, err := aes.NewCipher(aesKey)
+	if err != nil {
+		return nil, err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	if len(nonce) != gcm.NonceSize() {
+		return nil, errors.New("invalid nonce size")
+	}
+
+	return gcm.Open(nil, nonce, ciphertext, nil)
 }

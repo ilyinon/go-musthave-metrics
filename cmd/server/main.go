@@ -36,15 +36,6 @@ import (
 	"github.com/ilyinon/go-musthave-metrics/internal/crypto"
 )
 
-type ServerConfigFile struct {
-	Address       string `json:"address"`
-	Restore       *bool  `json:"restore"`
-	StoreInterval string `json:"store_interval"`
-	StoreFile     string `json:"store_file"`
-	DatabaseDSN   string `json:"database_dsn"`
-	CryptoKey     string `json:"crypto_key"`
-}
-
 // main configures application components, initializes storage,
 // sets up audit sinks and starts the HTTP server.
 func main() {
@@ -60,7 +51,7 @@ func main() {
 
 	var auditFile string
 	var auditURL string
-	restoreConfigured := false
+	configured := make(map[string]bool)
 
 	pprofServer := &http.Server{Addr: "localhost:6060"}
 	go func() {
@@ -76,40 +67,65 @@ func main() {
 
 	// read configuration from environment variables
 	if v, ok := os.LookupEnv("ADDRESS"); ok {
-		addr.Set(v)
+		configured["address"] = true
+		if err := addr.Set(v); err != nil {
+			log.Println("invalid ADDRESS:", err)
+		}
 	}
 	if v, ok := os.LookupEnv("STORE_INTERVAL"); ok {
+		configured["storeInterval"] = true
 		if sec, err := strconv.Atoi(v); err == nil {
 			storeInterval = time.Duration(sec) * time.Second
+		} else if d, err := time.ParseDuration(v); err == nil {
+			storeInterval = d
+		} else {
+			log.Println("invalid STORE_INTERVAL:", err)
 		}
 	}
 	if v, ok := os.LookupEnv("FILE_STORAGE_PATH"); ok {
+		configured["storeFile"] = true
 		storeFile = v
 	}
 	if v, ok := os.LookupEnv("RESTORE"); ok {
+		configured["restore"] = true
 		if b, err := strconv.ParseBool(v); err == nil {
 			restore = b
-			restoreConfigured = true
+		} else {
+			log.Println("invalid RESTORE:", err)
 		}
 	}
+	if v, ok := os.LookupEnv("DATABASE_DSN"); ok {
+		configured["databaseDSN"] = true
+		dsn = v
+	}
+	if v, ok := os.LookupEnv("KEY"); ok {
+		configured["key"] = true
+		key = v
+	}
+	if v, ok := os.LookupEnv("CRYPTO_KEY"); ok {
+		configured["cryptoKey"] = true
+		cryptoKeyPath = v
+	}
 	if v, ok := os.LookupEnv("AUDIT_FILE"); ok {
+		configured["auditFile"] = true
 		auditFile = v
 	}
 	if v, ok := os.LookupEnv("AUDIT_URL"); ok {
+		configured["auditURL"] = true
 		auditURL = v
 	}
 
 	// parse command-line flags
 	flag.Var(addr, "a", "server address")
-	flag.StringVar(&dsn, "d", "", "database dsn")
+	flag.StringVar(&dsn, "d", dsn, "database dsn")
 	flag.DurationVar(&storeInterval, "i", storeInterval, "store interval")
 	flag.StringVar(&storeFile, "f", storeFile, "storage file")
 	flag.BoolVar(&restore, "r", restore, "restore metrics")
-	flag.StringVar(&key, "k", "", "signing key")
+	flag.StringVar(&key, "k", key, "signing key")
 	flag.StringVar(&auditFile, "audit-file", auditFile, "audit file path")
 	flag.StringVar(&auditURL, "audit-url", auditURL, "audit url")
 	// новый флаг для приватного ключа
-	flag.StringVar(&cryptoKeyPath, "crypto-key", "", "path to private key for decryption")
+	flag.StringVar(&cryptoKeyPath, "crypto-key", cryptoKeyPath, "path to private key for decryption")
 
 	var configFile string
 	flag.StringVar(&configFile, "c", "", "path to JSON config file")
@@ -117,8 +133,25 @@ func main() {
 
 	flag.Parse()
 	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "r" {
-			restoreConfigured = true
+		switch f.Name {
+		case "a":
+			configured["address"] = true
+		case "d":
+			configured["databaseDSN"] = true
+		case "i":
+			configured["storeInterval"] = true
+		case "f":
+			configured["storeFile"] = true
+		case "r":
+			configured["restore"] = true
+		case "k":
+			configured["key"] = true
+		case "audit-file":
+			configured["auditFile"] = true
+		case "audit-url":
+			configured["auditURL"] = true
+		case "crypto-key":
+			configured["cryptoKey"] = true
 		}
 	})
 
@@ -134,42 +167,36 @@ func main() {
 			log.Fatalf("failed to read config file: %v", err)
 		}
 
-		var cfg ServerConfigFile
+		var cfg config.ServerConfigFile
 		if err := json.Unmarshal(data, &cfg); err != nil {
 			log.Fatalf("failed to parse config file: %v", err)
 		}
 
 		// Применяем только если флаг/ENV не установлен
-		if cfg.Address != "" && addr.String() == "localhost:8080" {
-			addr.Set(cfg.Address)
-		}
-		if cfg.StoreFile != "" && storeFile == "./metrics-db.json" {
-			storeFile = cfg.StoreFile
-		}
-		if cfg.StoreInterval != "" && storeInterval == 300*time.Second {
-			if d, err := time.ParseDuration(cfg.StoreInterval); err == nil {
-				storeInterval = d
+		if cfg.Address != "" && !configured["address"] {
+			if err := addr.Set(cfg.Address); err != nil {
+				log.Println("invalid address in config file:", err)
 			}
 		}
-		if cfg.Restore != nil && !restoreConfigured {
+		if cfg.StoreFile != "" && !configured["storeFile"] {
+			storeFile = cfg.StoreFile
+		}
+		if cfg.StoreInterval != "" && !configured["storeInterval"] {
+			if d, err := time.ParseDuration(cfg.StoreInterval); err == nil {
+				storeInterval = d
+			} else {
+				log.Println("invalid store_interval in config file:", err)
+			}
+		}
+		if cfg.Restore != nil && !configured["restore"] {
 			restore = *cfg.Restore
 		}
-		if cfg.DatabaseDSN != "" && dsn == "" {
+		if cfg.DatabaseDSN != "" && !configured["databaseDSN"] {
 			dsn = cfg.DatabaseDSN
 		}
-		if cfg.CryptoKey != "" && cryptoKeyPath == "" {
+		if cfg.CryptoKey != "" && !configured["cryptoKey"] {
 			cryptoKeyPath = cfg.CryptoKey
 		}
-	}
-
-	if dsn == "" {
-		dsn = os.Getenv("DATABASE_DSN")
-	}
-	if key == "" {
-		key = os.Getenv("KEY")
-	}
-	if cryptoKeyPath == "" {
-		cryptoKeyPath = os.Getenv("CRYPTO_KEY")
 	}
 
 	// initialize audit sinks
@@ -299,7 +326,7 @@ func main() {
 	// start HTTP server
 	handler := router.New(storage, key, auditor)
 	if privateKey != nil {
-		handler = appmw.DecryptRSA(privateKey)(handler)
+		handler = appmw.DecryptHybridRSA(privateKey)(handler)
 	}
 
 	server := &http.Server{

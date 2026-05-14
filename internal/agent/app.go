@@ -51,11 +51,8 @@ func New(
 }
 
 // Run starts metric collection and reporting loops.
+// The caller must pass a non-nil context.
 func (a *App) Run(ctx context.Context) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	pollTicker := time.NewTicker(a.pollInterval)
 	reportTicker := time.NewTicker(a.reportInterval)
 	defer pollTicker.Stop()
@@ -164,24 +161,22 @@ func (a *App) metricsBatch() []model.Metrics {
 }
 
 func (a *App) sendBatch(batch []model.Metrics) {
-	if err := a.client.Batch(batch); err == nil {
-		return
-	} else {
+	if err := a.client.Batch(batch); err != nil {
 		log.Printf("ERROR: batch send failed, fallback to single: %v", err)
-	}
 
-	for _, m := range batch {
-		var err error
+		for _, m := range batch {
+			var err error
 
-		switch m.MType {
-		case model.MetricGauge:
-			err = a.client.Gauge(m.ID, *m.Value)
-		case model.MetricCounter:
-			err = a.client.Counter(m.ID, *m.Delta)
-		}
+			switch m.MType {
+			case model.MetricGauge:
+				err = a.client.Gauge(m.ID, *m.Value)
+			case model.MetricCounter:
+				err = a.client.Counter(m.ID, *m.Delta)
+			}
 
-		if err != nil {
-			log.Printf("ERROR: metric send failed: id=%s type=%s err=%v", m.ID, m.MType, err)
+			if err != nil {
+				log.Printf("ERROR: metric send failed: id=%s type=%s err=%v", m.ID, m.MType, err)
+			}
 		}
 	}
 }

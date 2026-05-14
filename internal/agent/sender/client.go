@@ -85,7 +85,7 @@ func (c *Client) postWithRetry(uri string) error {
 
 		if c.publicKey != nil {
 			var err error
-			raw, err = crypto.EncryptRSA(c.publicKey, raw)
+			raw, err = crypto.EncryptHybridRSA(c.publicKey, raw)
 			if err != nil {
 				return err
 			}
@@ -117,15 +117,6 @@ func (c *Client) postWithRetry(uri string) error {
 // Batch sends multiple metrics in a single request.
 func (c *Client) Batch(metrics []model.Metrics) error {
 	if len(metrics) == 0 {
-		return nil
-	}
-
-	if c.publicKey != nil {
-		for _, m := range metrics {
-			if err := c.metricJSONWithRetry(m); err != nil {
-				return err
-			}
-		}
 		return nil
 	}
 
@@ -229,7 +220,7 @@ func (c *Client) postPayload(uri string, payload []byte, contentType string, con
 	}
 
 	if c.publicKey != nil {
-		encrypted, err := crypto.EncryptRSA(c.publicKey, payload)
+		encrypted, err := crypto.EncryptHybridRSA(c.publicKey, payload)
 		if err != nil {
 			return nil, err
 		}

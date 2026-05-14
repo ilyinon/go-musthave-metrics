@@ -1,6 +1,8 @@
 package sender
 
 import (
+	"bytes"
+	"compress/gzip"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
@@ -65,8 +67,11 @@ func TestBatchWithPublicKeySendsEncryptedSignedJSONMetrics(t *testing.T) {
 
 	var got []model.Metrics
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/update" {
-			t.Errorf("path mismatch: got %s, want /update", r.URL.Path)
+		if r.URL.Path != "/updates/" {
+			t.Errorf("path mismatch: got %s, want /updates/", r.URL.Path)
+		}
+		if r.Header.Get("Content-Encoding") != "gzip" {
+			t.Errorf("Content-Encoding = %q, want gzip", r.Header.Get("Content-Encoding"))
 		}
 
 		body, err := io.ReadAll(r.Body)
@@ -74,7 +79,7 @@ func TestBatchWithPublicKeySendsEncryptedSignedJSONMetrics(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		decrypted, err := appcrypto.DecryptRSA(privateKey, body)
+		decrypted, err := appcrypto.DecryptHybridRSA(privateKey, body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -83,12 +88,20 @@ func TestBatchWithPublicKeySendsEncryptedSignedJSONMetrics(t *testing.T) {
 			t.Fatalf("hash mismatch: got %s, want %s", r.Header.Get("HashSHA256"), want)
 		}
 
-		var metric model.Metrics
-		if err := json.Unmarshal(decrypted, &metric); err != nil {
+		gr, err := gzip.NewReader(bytes.NewReader(decrypted))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer gr.Close()
+
+		payload, err := io.ReadAll(gr)
+		if err != nil {
 			t.Fatal(err)
 		}
 
-		got = append(got, metric)
+		if err := json.Unmarshal(payload, &got); err != nil {
+			t.Fatal(err)
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -108,7 +121,7 @@ func TestBatchWithPublicKeySendsEncryptedSignedJSONMetrics(t *testing.T) {
 	}
 
 	if len(got) != len(metrics) {
-		t.Fatalf("expected %d requests, got %d", len(metrics), len(got))
+		t.Fatalf("expected %d metrics, got %d", len(metrics), len(got))
 	}
 	for i := range metrics {
 		if got[i].ID != metrics[i].ID || got[i].MType != metrics[i].MType {

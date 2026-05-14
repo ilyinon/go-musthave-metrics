@@ -9,8 +9,8 @@ import (
 	"github.com/ilyinon/go-musthave-metrics/internal/crypto"
 )
 
-// DecryptRSA returns middleware to decrypt POST body
-func DecryptRSA(privKey *rsa.PrivateKey) func(http.Handler) http.Handler {
+// DecryptHybridRSA returns middleware to decrypt POST body.
+func DecryptHybridRSA(privKey *rsa.PrivateKey) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodPost {
@@ -24,7 +24,7 @@ func DecryptRSA(privKey *rsa.PrivateKey) func(http.Handler) http.Handler {
 				return
 			}
 
-			decrypted, err := crypto.DecryptRSA(privKey, body)
+			decrypted, err := crypto.DecryptHybridRSA(privKey, body)
 			if err != nil {
 				http.Error(w, "failed to decrypt body", http.StatusBadRequest)
 				return
