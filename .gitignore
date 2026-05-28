@@ -31,3 +31,6 @@ audit.log
 /bin
 /profiles
 .DS_Store
+public.pem
+private.pem
+file.db

@@ -64,3 +64,20 @@ Dropped 50 nodes (cum <= 0.97MB)
       -2MB  1.03% 91.08%  -110.75MB 56.97%  github.com/ilyinon/go-musthave-metrics/internal/handler.(*UpdateJSONHandler).ServeHTTP
     0.50MB  0.26% 90.82%     1.50MB  0.77%  net/http.ListenAndServe (inline)
 ```
+
+
+## Генерируем сертификат
+
+```
+# приватный ключ
+openssl genrsa -out private.pem 2048
+
+# публичный ключ
+openssl rsa -in private.pem -pubout -out public.pem
+```
+
+```
+export CRYPTO_KEY=./private.pem
+или
+-crypto-key
+```
