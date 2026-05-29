@@ -30,6 +30,7 @@ type Client struct {
 	client    *resty.Client
 	key       string
 	publicKey *rsa.PublicKey
+	realIP    string
 }
 
 // New creates a new Client with the given base URL and optional signing key.
@@ -38,12 +39,18 @@ func New(baseURL string, key string) *Client {
 		baseURL: baseURL,
 		key:     key,
 		client:  resty.New().SetTimeout(3 * time.Second),
+		realIP:  localIPForURL(baseURL),
 	}
 }
 
 // SetPublicKey sets the RSA public key for encryption.
 func (c *Client) SetPublicKey(pub *rsa.PublicKey) {
 	c.publicKey = pub
+}
+
+// SetRealIP overrides the IP sent in the X-Real-IP header.
+func (c *Client) SetRealIP(ip string) {
+	c.realIP = ip
 }
 
 // Gauge sends a gauge metric to the server.
@@ -81,7 +88,7 @@ func (c *Client) postWithRetry(uri string) error {
 	for i := 0; i <= len(retryDelays); i++ {
 		raw := []byte{}
 
-		req := c.client.R()
+		req := c.newRequest()
 
 		if c.publicKey != nil {
 			var err error
@@ -206,7 +213,7 @@ func (c *Client) metricJSONOnce(metric model.Metrics) error {
 func (c *Client) postPayload(uri string, payload []byte, contentType string, contentEncoding string) (*resty.Response, error) {
 	body := payload
 
-	req := c.client.R()
+	req := c.newRequest()
 	if contentType != "" {
 		req.SetHeader("Content-Type", contentType)
 	}
@@ -230,6 +237,14 @@ func (c *Client) postPayload(uri string, payload []byte, contentType string, con
 	return req.SetBody(body).Post(uri)
 }
 
+func (c *Client) newRequest() *resty.Request {
+	req := c.client.R()
+	if c.realIP != "" {
+		req.SetHeader("X-Real-IP", c.realIP)
+	}
+	return req
+}
+
 func isRetriableHTTPError(err error) bool {
 	var ne net.Error
 	if errors.As(err, &ne) {
@@ -237,4 +252,77 @@ func isRetriableHTTPError(err error) bool {
 	}
 
 	return true
+}
+
+func localIPForURL(rawURL string) string {
+	if u, err := url.Parse(rawURL); err == nil {
+		host := u.Hostname()
+		if host != "" {
+			port := u.Port()
+			if port == "" {
+				port = "80"
+			}
+			if ip := outboundIP(net.JoinHostPort(host, port)); ip != "" {
+				return ip
+			}
+		}
+	}
+
+	if ip := firstInterfaceIP(); ip != "" {
+		return ip
+	}
+
+	return "127.0.0.1"
+}
+
+func outboundIP(address string) string {
+	conn, err := net.DialTimeout("udp", address, time.Second)
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+
+	addr, ok := conn.LocalAddr().(*net.UDPAddr)
+	if !ok || addr.IP == nil {
+		return ""
+	}
+
+	return addr.IP.String()
+}
+
+func firstInterfaceIP() string {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip == nil || ip.IsLoopback() {
+				continue
+			}
+			if ip4 := ip.To4(); ip4 != nil {
+				return ip4.String()
+			}
+			return ip.String()
+		}
+	}
+
+	return ""
 }

@@ -7,6 +7,7 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -54,6 +55,25 @@ func TestSendGaugeAndCounter(t *testing.T) {
 		if paths[i] != want[i] {
 			t.Errorf("path mismatch: got %s, want %s", paths[i], want[i])
 		}
+	}
+}
+
+func TestClientSendsRealIPHeader(t *testing.T) {
+	var gotHeader string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Get("X-Real-IP")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "")
+	if err := client.Gauge("TestGauge", 12.34); err != nil {
+		t.Fatal(err)
+	}
+
+	if net.ParseIP(gotHeader) == nil {
+		t.Fatalf("X-Real-IP = %q, want valid IP", gotHeader)
 	}
 }
 

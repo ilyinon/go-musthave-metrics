@@ -48,6 +48,7 @@ func main() {
 
 	var key string
 	var cryptoKeyPath string
+	var trustedSubnet string
 
 	var auditFile string
 	var auditURL string
@@ -106,6 +107,10 @@ func main() {
 		configured["cryptoKey"] = true
 		cryptoKeyPath = v
 	}
+	if v, ok := os.LookupEnv("TRUSTED_SUBNET"); ok {
+		configured["trustedSubnet"] = true
+		trustedSubnet = v
+	}
 	if v, ok := os.LookupEnv("AUDIT_FILE"); ok {
 		configured["auditFile"] = true
 		auditFile = v
@@ -126,6 +131,7 @@ func main() {
 	flag.StringVar(&auditURL, "audit-url", auditURL, "audit url")
 	// новый флаг для приватного ключа
 	flag.StringVar(&cryptoKeyPath, "crypto-key", cryptoKeyPath, "path to private key for decryption")
+	flag.StringVar(&trustedSubnet, "t", trustedSubnet, "trusted subnet in CIDR notation")
 
 	var configFile string
 	flag.StringVar(&configFile, "c", "", "path to JSON config file")
@@ -152,6 +158,8 @@ func main() {
 			configured["auditURL"] = true
 		case "crypto-key":
 			configured["cryptoKey"] = true
+		case "t":
+			configured["trustedSubnet"] = true
 		}
 	})
 
@@ -197,6 +205,14 @@ func main() {
 		if cfg.CryptoKey != "" && !configured["cryptoKey"] {
 			cryptoKeyPath = cfg.CryptoKey
 		}
+		if cfg.TrustedSubnet != "" && !configured["trustedSubnet"] {
+			trustedSubnet = cfg.TrustedSubnet
+		}
+	}
+
+	trustedSubnetNet, err := config.ParseTrustedSubnet(trustedSubnet)
+	if err != nil {
+		log.Fatalf("invalid trusted subnet: %v", err)
 	}
 
 	// initialize audit sinks
@@ -328,6 +344,7 @@ func main() {
 	if privateKey != nil {
 		handler = appmw.DecryptHybridRSA(privateKey)(handler)
 	}
+	handler = appmw.TrustedSubnet(trustedSubnetNet)(handler)
 
 	server := &http.Server{
 		Addr:    addr.String(),
