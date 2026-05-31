@@ -7,16 +7,25 @@ import (
 	"time"
 
 	"github.com/ilyinon/go-musthave-metrics/internal/agent/collector"
-	"github.com/ilyinon/go-musthave-metrics/internal/agent/sender"
 	"github.com/ilyinon/go-musthave-metrics/internal/model"
 )
 
 const defaultRateLimit = 1
 
+// MetricsSender sends metric batches.
+type MetricsSender interface {
+	Batch(metrics []model.Metrics) error
+}
+
+type singleMetricSender interface {
+	Gauge(name string, value float64) error
+	Counter(name string, value int64) error
+}
+
 // App represents the metrics agent responsible for collecting
 // and sending metrics to the server.
 type App struct {
-	client         *sender.Client
+	client         MetricsSender
 	serverURL      string
 	pollInterval   time.Duration
 	reportInterval time.Duration
@@ -31,7 +40,7 @@ type App struct {
 
 // New creates a new App with the given configuration.
 func New(
-	client *sender.Client,
+	client MetricsSender,
 	serverURL string,
 	poll, report time.Duration,
 	rateLimit int,
@@ -161,22 +170,30 @@ func (a *App) metricsBatch() []model.Metrics {
 }
 
 func (a *App) sendBatch(batch []model.Metrics) {
-	if err := a.client.Batch(batch); err != nil {
-		log.Printf("ERROR: batch send failed, fallback to single: %v", err)
+	err := a.client.Batch(batch)
+	if err == nil {
+		return
+	}
 
-		for _, m := range batch {
-			var err error
+	log.Printf("ERROR: batch send failed: %v", err)
 
-			switch m.MType {
-			case model.MetricGauge:
-				err = a.client.Gauge(m.ID, *m.Value)
-			case model.MetricCounter:
-				err = a.client.Counter(m.ID, *m.Delta)
-			}
+	singleSender, ok := a.client.(singleMetricSender)
+	if !ok {
+		return
+	}
 
-			if err != nil {
-				log.Printf("ERROR: metric send failed: id=%s type=%s err=%v", m.ID, m.MType, err)
-			}
+	for _, m := range batch {
+		var err error
+
+		switch m.MType {
+		case model.MetricGauge:
+			err = singleSender.Gauge(m.ID, *m.Value)
+		case model.MetricCounter:
+			err = singleSender.Counter(m.ID, *m.Delta)
+		}
+
+		if err != nil {
+			log.Printf("ERROR: metric send failed: id=%s type=%s err=%v", m.ID, m.MType, err)
 		}
 	}
 }

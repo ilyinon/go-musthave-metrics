@@ -5,5 +5,6 @@
   "store_file": "file.db",
   "database_dsn": "",
   "crypto_key": "",
-  "trusted_subnet": ""
+  "trusted_subnet": "",
+  "grpc_address": ""
 }

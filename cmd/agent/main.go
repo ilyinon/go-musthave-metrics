@@ -33,6 +33,7 @@ func main() {
 	report := config.SecondsDuration(10 * time.Second)
 	var key string
 	var cryptoKeyPath string
+	var grpcAddress string
 
 	rateLimit := 1
 	var publicKey *rsa.PublicKey
@@ -76,6 +77,10 @@ func main() {
 		configured["cryptoKey"] = true
 		cryptoKeyPath = v
 	}
+	if v, ok := os.LookupEnv("GRPC_ADDRESS"); ok {
+		configured["grpcAddress"] = true
+		grpcAddress = v
+	}
 
 	// command-line flags override environment variables
 	flag.Var(addr, "a", "server address host:port")
@@ -84,6 +89,8 @@ func main() {
 	flag.StringVar(&key, "k", key, "signing key")
 	flag.IntVar(&rateLimit, "l", rateLimit, "rate limit")
 	flag.StringVar(&cryptoKeyPath, "crypto-key", cryptoKeyPath, "path to public key file for encryption")
+	flag.StringVar(&grpcAddress, "g", grpcAddress, "gRPC server address")
+	flag.StringVar(&grpcAddress, "grpc-address", grpcAddress, "gRPC server address")
 
 	// JSON config file support
 	var configFile string
@@ -106,6 +113,10 @@ func main() {
 			configured["rateLimit"] = true
 		case "crypto-key":
 			configured["cryptoKey"] = true
+		case "g":
+			configured["grpcAddress"] = true
+		case "grpc-address":
+			configured["grpcAddress"] = true
 		}
 	})
 
@@ -145,10 +156,13 @@ func main() {
 		if cfg.CryptoKey != "" && !configured["cryptoKey"] {
 			cryptoKeyPath = cfg.CryptoKey
 		}
+		if cfg.GRPCAddress != "" && !configured["grpcAddress"] {
+			grpcAddress = cfg.GRPCAddress
+		}
 	}
 
-	// загружаем публичный ключ
-	if cryptoKeyPath != "" {
+	// загружаем публичный ключ для HTTP-шифрования
+	if cryptoKeyPath != "" && grpcAddress == "" {
 		pubData, err := os.ReadFile(cryptoKeyPath)
 		if err != nil {
 			log.Fatalf("failed to read public key: %v", err)
@@ -160,12 +174,27 @@ func main() {
 		publicKey = pub
 	}
 
-	client := sender.New(addr.String(), key)
-	client.SetPublicKey(publicKey)
+	var client agent.MetricsSender
+	serverURL := addr.String()
+
+	if grpcAddress != "" {
+		grpcClient, err := sender.NewGRPC(grpcAddress)
+		if err != nil {
+			log.Fatalf("failed to init gRPC client: %v", err)
+		}
+		defer grpcClient.Close()
+
+		client = grpcClient
+		serverURL = grpcAddress
+	} else {
+		httpClient := sender.New(addr.String(), key)
+		httpClient.SetPublicKey(publicKey)
+		client = httpClient
+	}
 
 	app := agent.New(
 		client,
-		addr.String(),
+		serverURL,
 		time.Duration(poll),
 		time.Duration(report),
 		rateLimit,
@@ -173,7 +202,7 @@ func main() {
 
 	log.Printf(
 		"agent started, server=%s poll=%s report=%s rateLimit=%d",
-		addr.String(),
+		serverURL,
 		time.Duration(poll),
 		time.Duration(report),
 		rateLimit,

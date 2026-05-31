@@ -255,16 +255,9 @@ func isRetriableHTTPError(err error) bool {
 }
 
 func localIPForURL(rawURL string) string {
-	if u, err := url.Parse(rawURL); err == nil {
-		host := u.Hostname()
-		if host != "" {
-			port := u.Port()
-			if port == "" {
-				port = "80"
-			}
-			if ip := outboundIP(net.JoinHostPort(host, port)); ip != "" {
-				return ip
-			}
+	if host, port := targetHostPort(rawURL); host != "" {
+		if ip := outboundIP(net.JoinHostPort(host, port)); ip != "" {
+			return ip
 		}
 	}
 
@@ -273,6 +266,30 @@ func localIPForURL(rawURL string) string {
 	}
 
 	return "127.0.0.1"
+}
+
+func targetHostPort(rawAddress string) (string, string) {
+	if u, err := url.Parse(rawAddress); err == nil && u.Hostname() != "" {
+		port := u.Port()
+		if port == "" {
+			port = "80"
+		}
+		return u.Hostname(), port
+	}
+
+	host, port, err := net.SplitHostPort(rawAddress)
+	if err == nil {
+		if host == "" {
+			host = "localhost"
+		}
+		return host, port
+	}
+
+	if rawAddress != "" {
+		return rawAddress, "80"
+	}
+
+	return "", ""
 }
 
 func outboundIP(address string) string {
