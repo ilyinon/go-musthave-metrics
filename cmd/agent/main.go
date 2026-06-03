@@ -34,6 +34,7 @@ func main() {
 	var key string
 	var cryptoKeyPath string
 	var grpcAddress string
+	var grpcCAFile string
 
 	rateLimit := 1
 	var publicKey *rsa.PublicKey
@@ -81,6 +82,10 @@ func main() {
 		configured["grpcAddress"] = true
 		grpcAddress = v
 	}
+	if v, ok := os.LookupEnv("GRPC_CA_FILE"); ok {
+		configured["grpcCAFile"] = true
+		grpcCAFile = v
+	}
 
 	// command-line flags override environment variables
 	flag.Var(addr, "a", "server address host:port")
@@ -91,6 +96,7 @@ func main() {
 	flag.StringVar(&cryptoKeyPath, "crypto-key", cryptoKeyPath, "path to public key file for encryption")
 	flag.StringVar(&grpcAddress, "g", grpcAddress, "gRPC server address")
 	flag.StringVar(&grpcAddress, "grpc-address", grpcAddress, "gRPC server address")
+	flag.StringVar(&grpcCAFile, "grpc-ca-file", grpcCAFile, "gRPC CA certificate file")
 
 	// JSON config file support
 	var configFile string
@@ -117,6 +123,8 @@ func main() {
 			configured["grpcAddress"] = true
 		case "grpc-address":
 			configured["grpcAddress"] = true
+		case "grpc-ca-file":
+			configured["grpcCAFile"] = true
 		}
 	})
 
@@ -159,6 +167,9 @@ func main() {
 		if cfg.GRPCAddress != "" && !configured["grpcAddress"] {
 			grpcAddress = cfg.GRPCAddress
 		}
+		if cfg.GRPCCAFile != "" && !configured["grpcCAFile"] {
+			grpcCAFile = cfg.GRPCCAFile
+		}
 	}
 
 	// загружаем публичный ключ для HTTP-шифрования
@@ -178,7 +189,7 @@ func main() {
 	serverURL := addr.String()
 
 	if grpcAddress != "" {
-		grpcClient, err := sender.NewGRPC(grpcAddress)
+		grpcClient, err := sender.NewGRPC(grpcAddress, grpcCAFile)
 		if err != nil {
 			log.Fatalf("failed to init gRPC client: %v", err)
 		}

@@ -3,12 +3,11 @@ package middleware
 import (
 	"net"
 	"net/http"
-	"strings"
+
+	"github.com/ilyinon/go-musthave-metrics/internal/realip"
 )
 
-const realIPHeader = "X-Real-IP"
-
-// TrustedSubnet restricts metric update requests to the configured trusted subnet.
+// TrustedSubnet restricts requests to the configured trusted subnet.
 func TrustedSubnet(subnet *net.IPNet) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		if subnet == nil {
@@ -16,13 +15,7 @@ func TrustedSubnet(subnet *net.IPNet) func(http.Handler) http.Handler {
 		}
 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !isMetricUpdateRequest(r) {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			ip := net.ParseIP(strings.TrimSpace(r.Header.Get(realIPHeader)))
-			if ip == nil || !subnet.Contains(ip) {
+			if err := realip.CheckTrustedSubnet(subnet, r.Header.Get(realip.Header)); err != nil {
 				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 				return
 			}
@@ -30,17 +23,4 @@ func TrustedSubnet(subnet *net.IPNet) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-func isMetricUpdateRequest(r *http.Request) bool {
-	if r.Method != http.MethodPost {
-		return false
-	}
-
-	path := r.URL.Path
-	return path == "/update" ||
-		path == "/update/" ||
-		strings.HasPrefix(path, "/update/") ||
-		path == "/updates/" ||
-		strings.HasPrefix(path, "/updates/")
 }

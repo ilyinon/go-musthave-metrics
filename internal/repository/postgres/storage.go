@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/avast/retry-go"
+	"github.com/ilyinon/go-musthave-metrics/internal/model"
+	"github.com/ilyinon/go-musthave-metrics/internal/repository"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgerrcode"
 )
@@ -129,7 +131,7 @@ func (s *Storage) ListGauges(ctx context.Context) map[string]float64 {
 
 func (s *Storage) UpdateCounter(ctx context.Context, name string, delta int64) {
 	const query = `
-		INSERT INTO counters (name, value)
+			INSERT INTO counters (name, value)
 		VALUES ($1, $2)
 		ON CONFLICT (name)
 		DO UPDATE SET value = counters.value + EXCLUDED.value
@@ -141,6 +143,57 @@ func (s *Storage) UpdateCounter(ctx context.Context, name string, delta int64) {
 	}); err != nil {
 		log.Printf("postgres: update counter failed (%s): %v", name, err)
 	}
+}
+
+func (s *Storage) UpdateBatch(ctx context.Context, metrics []model.Metrics) error {
+	if err := repository.ValidateMetrics(metrics); err != nil {
+		return err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	const gaugeQuery = `
+		INSERT INTO gauges (name, value)
+		VALUES ($1, $2)
+		ON CONFLICT (name)
+		DO UPDATE SET value = EXCLUDED.value
+	`
+	const counterQuery = `
+		INSERT INTO counters (name, value)
+		VALUES ($1, $2)
+		ON CONFLICT (name)
+		DO UPDATE SET value = counters.value + EXCLUDED.value
+	`
+
+	for _, metric := range metrics {
+		switch metric.MType {
+		case model.MetricGauge:
+			if _, err := tx.ExecContext(ctx, gaugeQuery, metric.ID, *metric.Value); err != nil {
+				return err
+			}
+		case model.MetricCounter:
+			if _, err := tx.ExecContext(ctx, counterQuery, metric.ID, *metric.Delta); err != nil {
+				return err
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	committed = true
+
+	return nil
 }
 
 func (s *Storage) GetCounter(ctx context.Context, name string) (int64, bool) {

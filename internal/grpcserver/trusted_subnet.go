@@ -2,16 +2,15 @@ package grpcserver
 
 import (
 	"context"
+	"errors"
 	"net"
-	"strings"
 
+	"github.com/ilyinon/go-musthave-metrics/internal/realip"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
-
-const realIPMetadataKey = "x-real-ip"
 
 // TrustedSubnetInterceptor restricts requests to the configured trusted subnet.
 func TrustedSubnetInterceptor(subnet *net.IPNet) grpc.UnaryServerInterceptor {
@@ -25,13 +24,15 @@ func TrustedSubnetInterceptor(subnet *net.IPNet) grpc.UnaryServerInterceptor {
 			return nil, status.Error(codes.PermissionDenied, "missing metadata")
 		}
 
-		values := md.Get(realIPMetadataKey)
+		values := md.Get(realip.MetadataKey)
 		if len(values) == 0 {
-			return nil, status.Error(codes.PermissionDenied, "missing x-real-ip metadata")
+			return nil, status.Errorf(codes.PermissionDenied, "missing %s metadata", realip.MetadataKey)
 		}
 
-		ip := net.ParseIP(strings.TrimSpace(values[0]))
-		if ip == nil || !subnet.Contains(ip) {
+		if err := realip.CheckTrustedSubnet(subnet, values[0]); err != nil {
+			if errors.Is(err, realip.ErrMissing) {
+				return nil, status.Errorf(codes.PermissionDenied, "missing %s metadata", realip.MetadataKey)
+			}
 			return nil, status.Error(codes.PermissionDenied, "agent ip is not trusted")
 		}
 

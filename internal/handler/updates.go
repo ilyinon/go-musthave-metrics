@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sort"
 	"time"
@@ -32,26 +33,13 @@ func (h *UpdatesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, m := range metrics {
-		switch m.MType {
-		case model.MetricGauge:
-			if m.Value == nil {
-				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-				return
-			}
-			h.storage.UpdateGauge(ctx, m.ID, *m.Value)
-
-		case model.MetricCounter:
-			if m.Delta == nil {
-				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-				return
-			}
-			h.storage.UpdateCounter(ctx, m.ID, *m.Delta)
-
-		default:
-			http.Error(w, "unknown metric type", http.StatusBadRequest)
+	if err := h.storage.UpdateBatch(ctx, metrics); err != nil {
+		if errors.Is(err, repository.ErrInvalidMetric) {
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
 	}
 
 	if h.auditor != nil {

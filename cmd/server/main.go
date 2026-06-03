@@ -38,6 +38,7 @@ import (
 
 	"github.com/ilyinon/go-musthave-metrics/internal/crypto"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 // main configures application components, initializes storage,
@@ -54,6 +55,8 @@ func main() {
 	var cryptoKeyPath string
 	var trustedSubnet string
 	var grpcAddress string
+	var grpcCertFile string
+	var grpcKeyFile string
 
 	var auditFile string
 	var auditURL string
@@ -120,6 +123,14 @@ func main() {
 		configured["grpcAddress"] = true
 		grpcAddress = v
 	}
+	if v, ok := os.LookupEnv("GRPC_CERT_FILE"); ok {
+		configured["grpcCertFile"] = true
+		grpcCertFile = v
+	}
+	if v, ok := os.LookupEnv("GRPC_KEY_FILE"); ok {
+		configured["grpcKeyFile"] = true
+		grpcKeyFile = v
+	}
 	if v, ok := os.LookupEnv("AUDIT_FILE"); ok {
 		configured["auditFile"] = true
 		auditFile = v
@@ -143,6 +154,8 @@ func main() {
 	flag.StringVar(&trustedSubnet, "t", trustedSubnet, "trusted subnet in CIDR notation")
 	flag.StringVar(&grpcAddress, "g", grpcAddress, "gRPC server address")
 	flag.StringVar(&grpcAddress, "grpc-address", grpcAddress, "gRPC server address")
+	flag.StringVar(&grpcCertFile, "grpc-cert-file", grpcCertFile, "gRPC TLS certificate file")
+	flag.StringVar(&grpcKeyFile, "grpc-key-file", grpcKeyFile, "gRPC TLS private key file")
 
 	var configFile string
 	flag.StringVar(&configFile, "c", "", "path to JSON config file")
@@ -175,6 +188,10 @@ func main() {
 			configured["grpcAddress"] = true
 		case "grpc-address":
 			configured["grpcAddress"] = true
+		case "grpc-cert-file":
+			configured["grpcCertFile"] = true
+		case "grpc-key-file":
+			configured["grpcKeyFile"] = true
 		}
 	})
 
@@ -225,6 +242,12 @@ func main() {
 		}
 		if cfg.GRPCAddress != "" && !configured["grpcAddress"] {
 			grpcAddress = cfg.GRPCAddress
+		}
+		if cfg.GRPCCertFile != "" && !configured["grpcCertFile"] {
+			grpcCertFile = cfg.GRPCCertFile
+		}
+		if cfg.GRPCKeyFile != "" && !configured["grpcKeyFile"] {
+			grpcKeyFile = cfg.GRPCKeyFile
 		}
 	}
 
@@ -358,11 +381,10 @@ func main() {
 	}
 
 	// start HTTP server
-	handler := router.New(storage, key, auditor)
+	handler := router.New(storage, key, auditor, trustedSubnetNet)
 	if privateKey != nil {
 		handler = appmw.DecryptHybridRSA(privateKey)(handler)
 	}
-	handler = appmw.TrustedSubnet(trustedSubnetNet)(handler)
 
 	server := &http.Server{
 		Addr:    addr.String(),
@@ -378,12 +400,22 @@ func main() {
 	var grpcSrv *grpc.Server
 	var grpcErr chan error
 	if grpcAddress != "" {
+		if grpcCertFile == "" || grpcKeyFile == "" {
+			log.Fatal("gRPC TLS certificate and private key files are required")
+		}
+
+		grpcCreds, err := credentials.NewServerTLSFromFile(grpcCertFile, grpcKeyFile)
+		if err != nil {
+			log.Fatalf("failed to load gRPC TLS credentials: %v", err)
+		}
+
 		grpcListener, err := net.Listen("tcp", grpcAddress)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		grpcSrv = grpc.NewServer(
+			grpc.Creds(grpcCreds),
 			grpc.UnaryInterceptor(grpcserver.TrustedSubnetInterceptor(trustedSubnetNet)),
 		)
 		metricspb.RegisterMetricsServer(grpcSrv, grpcserver.New(storage))

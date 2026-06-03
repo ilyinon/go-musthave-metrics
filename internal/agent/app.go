@@ -14,12 +14,12 @@ const defaultRateLimit = 1
 
 // MetricsSender sends metric batches.
 type MetricsSender interface {
-	Batch(metrics []model.Metrics) error
+	Batch(ctx context.Context, metrics []model.Metrics) error
 }
 
 type singleMetricSender interface {
-	Gauge(name string, value float64) error
-	Counter(name string, value int64) error
+	Gauge(ctx context.Context, name string, value float64) error
+	Counter(ctx context.Context, name string, value int64) error
 }
 
 // App represents the metrics agent responsible for collecting
@@ -77,28 +77,20 @@ func (a *App) Run(ctx context.Context) {
 			defer wg.Done()
 
 			for batch := range sendCh {
-				a.sendBatch(batch)
+				a.sendBatch(ctx, batch)
 			}
 		}()
 	}
 
-	dirty := false
-
 	for {
 		select {
 		case <-ctx.Done():
-			if dirty {
-				if batch := a.metricsBatch(); len(batch) > 0 {
-					sendCh <- batch
-				}
-			}
 			close(sendCh)
 			wg.Wait()
 			return
 
 		case <-pollTicker.C:
 			a.collect()
-			dirty = true
 
 		case <-reportTicker.C:
 			batch := a.metricsBatch()
@@ -108,9 +100,7 @@ func (a *App) Run(ctx context.Context) {
 
 			select {
 			case sendCh <- batch:
-				dirty = false
 			case <-ctx.Done():
-				sendCh <- batch
 				close(sendCh)
 				wg.Wait()
 				return
@@ -169,9 +159,12 @@ func (a *App) metricsBatch() []model.Metrics {
 	return batch
 }
 
-func (a *App) sendBatch(batch []model.Metrics) {
-	err := a.client.Batch(batch)
+func (a *App) sendBatch(ctx context.Context, batch []model.Metrics) {
+	err := a.client.Batch(ctx, batch)
 	if err == nil {
+		return
+	}
+	if ctx.Err() != nil {
 		return
 	}
 
@@ -187,11 +180,14 @@ func (a *App) sendBatch(batch []model.Metrics) {
 
 		switch m.MType {
 		case model.MetricGauge:
-			err = singleSender.Gauge(m.ID, *m.Value)
+			err = singleSender.Gauge(ctx, m.ID, *m.Value)
 		case model.MetricCounter:
-			err = singleSender.Counter(m.ID, *m.Delta)
+			err = singleSender.Counter(ctx, m.ID, *m.Delta)
 		}
 
+		if ctx.Err() != nil {
+			return
+		}
 		if err != nil {
 			log.Printf("ERROR: metric send failed: id=%s type=%s err=%v", m.ID, m.MType, err)
 		}

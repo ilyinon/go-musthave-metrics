@@ -6,5 +6,7 @@
   "database_dsn": "",
   "crypto_key": "",
   "trusted_subnet": "",
-  "grpc_address": ""
+  "grpc_address": "",
+  "grpc_cert_file": "",
+  "grpc_key_file": ""
 }

@@ -3,6 +3,7 @@ package sender
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/rsa"
 	"encoding/json"
 	"errors"
@@ -16,13 +17,8 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/ilyinon/go-musthave-metrics/internal/crypto"
 	"github.com/ilyinon/go-musthave-metrics/internal/model"
+	"github.com/ilyinon/go-musthave-metrics/internal/realip"
 )
-
-var retryDelays = []time.Duration{
-	1 * time.Second,
-	3 * time.Second,
-	5 * time.Second,
-}
 
 // Client sends metrics to the server over HTTP.
 type Client struct {
@@ -48,15 +44,15 @@ func (c *Client) SetPublicKey(pub *rsa.PublicKey) {
 	c.publicKey = pub
 }
 
-// SetRealIP overrides the IP sent in the X-Real-IP header.
+// SetRealIP overrides the IP sent in the real IP header.
 func (c *Client) SetRealIP(ip string) {
 	c.realIP = ip
 }
 
 // Gauge sends a gauge metric to the server.
-func (c *Client) Gauge(name string, value float64) error {
+func (c *Client) Gauge(ctx context.Context, name string, value float64) error {
 	if c.publicKey != nil {
-		return c.metricJSONWithRetry(model.Metrics{
+		return c.metricJSONWithRetry(ctx, model.Metrics{
 			ID:    name,
 			MType: model.MetricGauge,
 			Value: &value,
@@ -65,13 +61,13 @@ func (c *Client) Gauge(name string, value float64) error {
 
 	val := strconv.FormatFloat(value, 'g', -1, 64)
 	uri := fmt.Sprintf("%s/update/gauge/%s/%s", c.baseURL, url.PathEscape(name), val)
-	return c.postWithRetry(uri)
+	return c.postWithRetry(ctx, uri)
 }
 
 // Counter sends a counter metric to the server.
-func (c *Client) Counter(name string, value int64) error {
+func (c *Client) Counter(ctx context.Context, name string, value int64) error {
 	if c.publicKey != nil {
-		return c.metricJSONWithRetry(model.Metrics{
+		return c.metricJSONWithRetry(ctx, model.Metrics{
 			ID:    name,
 			MType: model.MetricCounter,
 			Delta: &value,
@@ -79,16 +75,20 @@ func (c *Client) Counter(name string, value int64) error {
 	}
 
 	uri := fmt.Sprintf("%s/update/counter/%s/%d", c.baseURL, url.PathEscape(name), value)
-	return c.postWithRetry(uri)
+	return c.postWithRetry(ctx, uri)
 }
 
-func (c *Client) postWithRetry(uri string) error {
+func (c *Client) postWithRetry(ctx context.Context, uri string) error {
 	var lastErr error
 
 	for i := 0; i <= len(retryDelays); i++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		raw := []byte{}
 
-		req := c.newRequest()
+		req := c.newRequest(ctx)
 
 		if c.publicKey != nil {
 			var err error
@@ -115,14 +115,16 @@ func (c *Client) postWithRetry(uri string) error {
 			break
 		}
 
-		time.Sleep(retryDelays[i])
+		if err := waitRetry(ctx, retryDelays[i]); err != nil {
+			return err
+		}
 	}
 
 	return lastErr
 }
 
 // Batch sends multiple metrics in a single request.
-func (c *Client) Batch(metrics []model.Metrics) error {
+func (c *Client) Batch(ctx context.Context, metrics []model.Metrics) error {
 	if len(metrics) == 0 {
 		return nil
 	}
@@ -130,7 +132,11 @@ func (c *Client) Batch(metrics []model.Metrics) error {
 	var lastErr error
 
 	for i := 0; i <= len(retryDelays); i++ {
-		lastErr = c.batchOnce(metrics)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		lastErr = c.batchOnce(ctx, metrics)
 		if lastErr == nil {
 			return nil
 		}
@@ -139,13 +145,15 @@ func (c *Client) Batch(metrics []model.Metrics) error {
 			break
 		}
 
-		time.Sleep(retryDelays[i])
+		if err := waitRetry(ctx, retryDelays[i]); err != nil {
+			return err
+		}
 	}
 
 	return lastErr
 }
 
-func (c *Client) batchOnce(metrics []model.Metrics) error {
+func (c *Client) batchOnce(ctx context.Context, metrics []model.Metrics) error {
 	raw, err := json.Marshal(metrics)
 	if err != nil {
 		return err
@@ -159,7 +167,7 @@ func (c *Client) batchOnce(metrics []model.Metrics) error {
 	}
 	_ = gz.Close()
 
-	resp, err := c.postPayload(c.baseURL+"/updates/", buf.Bytes(), "application/json", "gzip")
+	resp, err := c.postPayload(ctx, c.baseURL+"/updates/", buf.Bytes(), "application/json", "gzip")
 	if err != nil {
 		return err
 	}
@@ -172,11 +180,15 @@ func (c *Client) batchOnce(metrics []model.Metrics) error {
 	return nil
 }
 
-func (c *Client) metricJSONWithRetry(metric model.Metrics) error {
+func (c *Client) metricJSONWithRetry(ctx context.Context, metric model.Metrics) error {
 	var lastErr error
 
 	for i := 0; i <= len(retryDelays); i++ {
-		lastErr = c.metricJSONOnce(metric)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		lastErr = c.metricJSONOnce(ctx, metric)
 		if lastErr == nil {
 			return nil
 		}
@@ -185,19 +197,21 @@ func (c *Client) metricJSONWithRetry(metric model.Metrics) error {
 			break
 		}
 
-		time.Sleep(retryDelays[i])
+		if err := waitRetry(ctx, retryDelays[i]); err != nil {
+			return err
+		}
 	}
 
 	return lastErr
 }
 
-func (c *Client) metricJSONOnce(metric model.Metrics) error {
+func (c *Client) metricJSONOnce(ctx context.Context, metric model.Metrics) error {
 	payload, err := json.Marshal(metric)
 	if err != nil {
 		return err
 	}
 
-	resp, err := c.postPayload(c.baseURL+"/update", payload, "application/json", "")
+	resp, err := c.postPayload(ctx, c.baseURL+"/update", payload, "application/json", "")
 	if err != nil {
 		return err
 	}
@@ -210,10 +224,10 @@ func (c *Client) metricJSONOnce(metric model.Metrics) error {
 	return nil
 }
 
-func (c *Client) postPayload(uri string, payload []byte, contentType string, contentEncoding string) (*resty.Response, error) {
+func (c *Client) postPayload(ctx context.Context, uri string, payload []byte, contentType string, contentEncoding string) (*resty.Response, error) {
 	body := payload
 
-	req := c.newRequest()
+	req := c.newRequest(ctx)
 	if contentType != "" {
 		req.SetHeader("Content-Type", contentType)
 	}
@@ -237,10 +251,10 @@ func (c *Client) postPayload(uri string, payload []byte, contentType string, con
 	return req.SetBody(body).Post(uri)
 }
 
-func (c *Client) newRequest() *resty.Request {
-	req := c.client.R()
+func (c *Client) newRequest(ctx context.Context) *resty.Request {
+	req := c.client.R().SetContext(ctx)
 	if c.realIP != "" {
-		req.SetHeader("X-Real-IP", c.realIP)
+		req.SetHeader(realip.Header, c.realIP)
 	}
 	return req
 }

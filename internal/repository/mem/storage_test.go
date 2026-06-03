@@ -3,6 +3,8 @@ package mem
 import (
 	"context"
 	"testing"
+
+	"github.com/ilyinon/go-musthave-metrics/internal/model"
 )
 
 func TestStorage_UpdateAndGetGauge(t *testing.T) {
@@ -41,5 +43,23 @@ func TestStorage_List(t *testing.T) {
 	}
 	if len(store.ListCounters(ctx)) != 1 {
 		t.Fatal("expected 1 counter")
+	}
+}
+
+func TestStorage_UpdateBatchRejectsAtomically(t *testing.T) {
+	store := New()
+	ctx := context.Background()
+
+	value := 12.5
+	err := store.UpdateBatch(ctx, []model.Metrics{
+		{ID: "Load", MType: model.MetricGauge, Value: &value},
+		{ID: "Broken", MType: model.MetricGauge},
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	if _, ok := store.GetGauge(ctx, "Load"); ok {
+		t.Fatal("valid metric from rejected batch was stored")
 	}
 }

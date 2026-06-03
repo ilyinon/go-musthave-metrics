@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ilyinon/go-musthave-metrics/internal/proto/metricspb"
+	"github.com/ilyinon/go-musthave-metrics/internal/realip"
 	"github.com/ilyinon/go-musthave-metrics/internal/repository/mem"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -17,12 +18,12 @@ func TestServerUpdateMetrics(t *testing.T) {
 	store := mem.New()
 	server := New(store)
 
-	_, err := server.UpdateMetrics(context.Background(), &metricspb.UpdateMetricsRequest{
+	_, err := server.UpdateMetrics(context.Background(), metricspb.UpdateMetricsRequest_builder{
 		Metrics: []*metricspb.Metric{
-			{Id: "Load", Type: metricspb.Metric_GAUGE, Value: 12.5},
-			{Id: "PollCount", Type: metricspb.Metric_COUNTER, Delta: 3},
+			metricspb.Metric_builder{Id: "Load", Type: metricspb.Metric_GAUGE, Value: 12.5}.Build(),
+			metricspb.Metric_builder{Id: "PollCount", Type: metricspb.Metric_COUNTER, Delta: 3}.Build(),
 		},
-	})
+	}.Build())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,6 +33,25 @@ func TestServerUpdateMetrics(t *testing.T) {
 	}
 	if got, ok := store.GetCounter(context.Background(), "PollCount"); !ok || got != 3 {
 		t.Fatalf("counter PollCount = %v, %v; want 3, true", got, ok)
+	}
+}
+
+func TestServerUpdateMetricsRejectsBatchAtomically(t *testing.T) {
+	store := mem.New()
+	server := New(store)
+
+	_, err := server.UpdateMetrics(context.Background(), metricspb.UpdateMetricsRequest_builder{
+		Metrics: []*metricspb.Metric{
+			metricspb.Metric_builder{Id: "Load", Type: metricspb.Metric_GAUGE, Value: 12.5}.Build(),
+			metricspb.Metric_builder{Id: "Broken", Type: metricspb.Metric_MType(99)}.Build(),
+		},
+	}.Build())
+
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("status code = %v, want %v", status.Code(err), codes.InvalidArgument)
+	}
+	if _, ok := store.GetGauge(context.Background(), "Load"); ok {
+		t.Fatal("valid metric from rejected batch was stored")
 	}
 }
 
@@ -57,12 +77,12 @@ func TestTrustedSubnetInterceptor(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
 			if tt.ip != "" {
-				ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(realIPMetadataKey, tt.ip))
+				ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(realip.MetadataKey, tt.ip))
 			}
 
 			interceptor := TrustedSubnetInterceptor(tt.subnet)
 			_, err := interceptor(ctx, nil, &grpc.UnaryServerInfo{}, func(context.Context, any) (any, error) {
-				return &metricspb.UpdateMetricsResponse{}, nil
+				return metricspb.UpdateMetricsResponse_builder{}.Build(), nil
 			})
 
 			if status.Code(err) != tt.wantErr {
