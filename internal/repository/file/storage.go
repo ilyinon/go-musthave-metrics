@@ -38,6 +38,10 @@ func (s *Storage) UpdateCounter(ctx context.Context, name string, value int64) {
 	s.mem.UpdateCounter(ctx, name, value)
 }
 
+func (s *Storage) UpdateBatch(ctx context.Context, metrics []model.Metrics) error {
+	return s.mem.UpdateBatch(ctx, metrics)
+}
+
 func (s *Storage) GetGauge(ctx context.Context, name string) (float64, bool) {
 	return s.mem.GetGauge(ctx, name)
 }

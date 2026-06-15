@@ -81,3 +81,24 @@ export CRYPTO_KEY=./private.pem
 или
 -crypto-key
 ```
+
+
+```
+openssl req -x509 -newkey rsa:2048 -nodes \
+  -keyout conf/grpc-server.key \
+  -out conf/grpc-server.crt \
+  -days 365 \
+  -subj "/CN=localhost" \
+  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+```
+
+```
+go run ./cmd/server -g localhost:9090 \
+  -grpc-cert-file conf/grpc-server.crt \
+  -grpc-key-file conf/grpc-server.key
+```
+
+```
+go run ./cmd/agent -g localhost:9090 \
+  -grpc-ca-file conf/grpc-server.crt
+```

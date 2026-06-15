@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/ilyinon/go-musthave-metrics/internal/model"
 	"github.com/ilyinon/go-musthave-metrics/internal/repository"
 )
 
@@ -39,6 +40,26 @@ func (s *Storage) UpdateCounter(ctx context.Context, name string, value int64) {
 	defer s.mu.Unlock()
 
 	s.counters[name] += value
+}
+
+func (s *Storage) UpdateBatch(ctx context.Context, metrics []model.Metrics) error {
+	if err := repository.ValidateMetrics(metrics); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, metric := range metrics {
+		switch metric.MType {
+		case model.MetricGauge:
+			s.gauges[metric.ID] = *metric.Value
+		case model.MetricCounter:
+			s.counters[metric.ID] += *metric.Delta
+		}
+	}
+
+	return nil
 }
 
 func (s *Storage) GetGauge(ctx context.Context, name string) (float64, bool) {

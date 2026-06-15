@@ -3,16 +3,19 @@ package sender
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	appcrypto "github.com/ilyinon/go-musthave-metrics/internal/crypto"
 	"github.com/ilyinon/go-musthave-metrics/internal/model"
+	"github.com/ilyinon/go-musthave-metrics/internal/realip"
 )
 
 func TestNewClient(t *testing.T) {
@@ -38,8 +41,8 @@ func TestSendGaugeAndCounter(t *testing.T) {
 
 	client := New(server.URL, "")
 
-	client.Gauge("TestGauge", 12.34)
-	client.Counter("TestCounter", 5)
+	client.Gauge(context.Background(), "TestGauge", 12.34)
+	client.Counter(context.Background(), "TestCounter", 5)
 
 	if len(paths) != 2 {
 		t.Fatalf("expected 2 requests, got %d", len(paths))
@@ -54,6 +57,25 @@ func TestSendGaugeAndCounter(t *testing.T) {
 		if paths[i] != want[i] {
 			t.Errorf("path mismatch: got %s, want %s", paths[i], want[i])
 		}
+	}
+}
+
+func TestClientSendsRealIPHeader(t *testing.T) {
+	var gotHeader string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Get(realip.Header)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "")
+	if err := client.Gauge(context.Background(), "TestGauge", 12.34); err != nil {
+		t.Fatal(err)
+	}
+
+	if net.ParseIP(gotHeader) == nil {
+		t.Fatalf("real IP header = %q, want valid IP", gotHeader)
 	}
 }
 
@@ -116,7 +138,7 @@ func TestBatchWithPublicKeySendsEncryptedSignedJSONMetrics(t *testing.T) {
 	client := New(server.URL, key)
 	client.SetPublicKey(&privateKey.PublicKey)
 
-	if err := client.Batch(metrics); err != nil {
+	if err := client.Batch(context.Background(), metrics); err != nil {
 		t.Fatal(err)
 	}
 

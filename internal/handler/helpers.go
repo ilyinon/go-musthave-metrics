@@ -3,12 +3,14 @@ package handler
 import (
 	"net"
 	"net/http"
+
+	"github.com/ilyinon/go-musthave-metrics/internal/realip"
 )
 
 // extractIP returns the client IP address from the request.
-// It prefers the X-Real-IP header and falls back to RemoteAddr.
+// It prefers the real IP header and falls back to RemoteAddr.
 func extractIP(r *http.Request) string {
-	ip := r.Header.Get("X-Real-IP")
+	ip := r.Header.Get(realip.Header)
 	if ip != "" {
 		return ip
 	}

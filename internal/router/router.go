@@ -1,6 +1,7 @@
 package router
 
 import (
+	"net"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -13,7 +14,7 @@ import (
 )
 
 // New initializes and returns an HTTP router with all endpoints configured.
-func New(storage repository.Storage, key string, auditor *audit.Auditor) http.Handler {
+func New(storage repository.Storage, key string, auditor *audit.Auditor, trustedSubnet *net.IPNet) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(chimw.RealIP)
@@ -32,15 +33,20 @@ func New(storage repository.Storage, key string, auditor *audit.Auditor) http.Ha
 	r.Get("/", indexHandler.ServeHTTP)
 	r.Get("/ping", indexHandler.Ping)
 
-	r.Post("/update/{type}/{name}/{value}", handler.NewUpdate(storage, auditor).ServeHTTP)
-	r.Post("/update", handler.NewUpdateJSON(storage, auditor).ServeHTTP)
-	r.Post("/update/", handler.NewUpdateJSON(storage, auditor).ServeHTTP)
+	r.Group(func(r chi.Router) {
+		if trustedSubnet != nil {
+			r.Use(appmw.TrustedSubnet(trustedSubnet))
+		}
+
+		r.Post("/update/{type}/{name}/{value}", handler.NewUpdate(storage, auditor).ServeHTTP)
+		r.Post("/update", handler.NewUpdateJSON(storage, auditor).ServeHTTP)
+		r.Post("/update/", handler.NewUpdateJSON(storage, auditor).ServeHTTP)
+		r.Post("/updates/", handler.NewUpdates(storage, auditor).ServeHTTP)
+	})
 
 	r.Post("/value", handler.NewValueJSON(storage).ServeHTTP)
 	r.Post("/value/", handler.NewValueJSON(storage).ServeHTTP)
 	r.Get("/value/{type}/{name}", handler.NewValue(storage).ServeHTTP)
-
-	r.Post("/updates/", handler.NewUpdates(storage, auditor).ServeHTTP)
 
 	return r
 }

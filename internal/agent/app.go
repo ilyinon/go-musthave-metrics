@@ -7,16 +7,25 @@ import (
 	"time"
 
 	"github.com/ilyinon/go-musthave-metrics/internal/agent/collector"
-	"github.com/ilyinon/go-musthave-metrics/internal/agent/sender"
 	"github.com/ilyinon/go-musthave-metrics/internal/model"
 )
 
 const defaultRateLimit = 1
 
+// MetricsSender sends metric batches.
+type MetricsSender interface {
+	Batch(ctx context.Context, metrics []model.Metrics) error
+}
+
+type singleMetricSender interface {
+	Gauge(ctx context.Context, name string, value float64) error
+	Counter(ctx context.Context, name string, value int64) error
+}
+
 // App represents the metrics agent responsible for collecting
 // and sending metrics to the server.
 type App struct {
-	client         *sender.Client
+	client         MetricsSender
 	serverURL      string
 	pollInterval   time.Duration
 	reportInterval time.Duration
@@ -31,7 +40,7 @@ type App struct {
 
 // New creates a new App with the given configuration.
 func New(
-	client *sender.Client,
+	client MetricsSender,
 	serverURL string,
 	poll, report time.Duration,
 	rateLimit int,
@@ -68,28 +77,20 @@ func (a *App) Run(ctx context.Context) {
 			defer wg.Done()
 
 			for batch := range sendCh {
-				a.sendBatch(batch)
+				a.sendBatch(ctx, batch)
 			}
 		}()
 	}
 
-	dirty := false
-
 	for {
 		select {
 		case <-ctx.Done():
-			if dirty {
-				if batch := a.metricsBatch(); len(batch) > 0 {
-					sendCh <- batch
-				}
-			}
 			close(sendCh)
 			wg.Wait()
 			return
 
 		case <-pollTicker.C:
 			a.collect()
-			dirty = true
 
 		case <-reportTicker.C:
 			batch := a.metricsBatch()
@@ -99,9 +100,7 @@ func (a *App) Run(ctx context.Context) {
 
 			select {
 			case sendCh <- batch:
-				dirty = false
 			case <-ctx.Done():
-				sendCh <- batch
 				close(sendCh)
 				wg.Wait()
 				return
@@ -160,23 +159,37 @@ func (a *App) metricsBatch() []model.Metrics {
 	return batch
 }
 
-func (a *App) sendBatch(batch []model.Metrics) {
-	if err := a.client.Batch(batch); err != nil {
-		log.Printf("ERROR: batch send failed, fallback to single: %v", err)
+func (a *App) sendBatch(ctx context.Context, batch []model.Metrics) {
+	err := a.client.Batch(ctx, batch)
+	if err == nil {
+		return
+	}
+	if ctx.Err() != nil {
+		return
+	}
 
-		for _, m := range batch {
-			var err error
+	log.Printf("ERROR: batch send failed: %v", err)
 
-			switch m.MType {
-			case model.MetricGauge:
-				err = a.client.Gauge(m.ID, *m.Value)
-			case model.MetricCounter:
-				err = a.client.Counter(m.ID, *m.Delta)
-			}
+	singleSender, ok := a.client.(singleMetricSender)
+	if !ok {
+		return
+	}
 
-			if err != nil {
-				log.Printf("ERROR: metric send failed: id=%s type=%s err=%v", m.ID, m.MType, err)
-			}
+	for _, m := range batch {
+		var err error
+
+		switch m.MType {
+		case model.MetricGauge:
+			err = singleSender.Gauge(ctx, m.ID, *m.Value)
+		case model.MetricCounter:
+			err = singleSender.Counter(ctx, m.ID, *m.Delta)
+		}
+
+		if ctx.Err() != nil {
+			return
+		}
+		if err != nil {
+			log.Printf("ERROR: metric send failed: id=%s type=%s err=%v", m.ID, m.MType, err)
 		}
 	}
 }
